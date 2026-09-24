@@ -1,0 +1,125 @@
+# RapidJAM Configurator Plan
+
+## Current Status
+
+- [x] Standalone React/Vite configurator scaffold created.
+- [x] MockTransport implemented for development without hardware.
+- [x] App shell implemented: connection state, dirty state, Save, Discard.
+- [x] Hall CH0-CH15 layout and physical labels added.
+- [x] Hall defaults added from the current RapidJAM settings:
+  - ADC: GPIO29
+  - Multiplexer: 16 channels
+  - Select pins: GPIO13, GPIO14, GPIO15, GPIO26
+  - Idle: 2350
+  - Active: 2450, except CH13: 2700
+  - Pressed: 3100
+  - Rapid Trigger threshold: 2800
+  - Noise filter: 30
+  - Polarity: N
+- [x] User-adjusted approximate Hall button coordinates are stored in `src/styles.css`.
+- [x] GPIO configuration is limited to GP0-GP5.
+- [x] Current GPIO defaults added:
+  - GP0: S2
+  - GP1: A1
+  - GP2: Menu Down
+  - GP3: Menu Select
+  - GP4: Menu Back
+  - GP5: Fn
+- [x] GPIO assignment choices added for standard actions, Turbo, Macro, Accelerator, Brake, Home, Menu actions, and Fn.
+- [x] Production build passes with `npm run build`.
+
+## Phase 1 HTTP Integration
+
+1. [x] Add selectable `HttpTransport` for a real RapidJAM at `http://192.168.7.1`. Use `?transport=http` in the app URL.
+2. [x] Implement `getPinMappings` and `setPinMappings` mapping between GP2040-CE JSON and the app's GP0-GP5 model.
+3. [x] Implement `getHETriggerCalibrations` and `setHETriggerCalibrations` mapping for CH0-CH15.
+4. [ ] Implement `getHETriggerVoltage` for live Hall signal display.
+5. [x] Add request logging, network error context, and a visible connection diagnostic for unreachable devices. More granular firmware/value errors remain.
+6. [ ] Verify save with a readback on physical hardware. The current GP2040 endpoints save immediately, so preview is local until commit.
+7. [x] Test with the physical RapidJAM in WebConfig/RNDIS mode through the VS Code browser. Firmware and Hall/GPIO reads succeeded.
+
+### HTTP test procedure
+
+1. Start the configurator with `npm run dev`.
+2. Put RapidJAM into WebConfig/RNDIS mode and confirm `http://192.168.7.1/` opens in the browser.
+3. Open `http://127.0.0.1:5173/?transport=http`.
+4. Confirm the header shows the firmware version and the GPIO/Hall values match WebConfig.
+5. Change one GPIO assignment or one Hall setting, then use `Save to device`.
+6. Reconnect or power-cycle RapidJAM and confirm the value remains after reloading the configurator.
+
+The HTTP adapter currently preserves the API's raw Hall calibration values and converts the UI's 0.0-1.5 mm values to ADC thresholds using each channel's idle and pressed values. Turbo/Macro/standard actions with known GP2040 enum values are supported. Assignments without a matching GP2040 GPIO enum are rejected rather than silently written.
+
+## Hall Calibration Implementation
+
+- [x] Add HTTP transport methods for per-channel voltage reads; calibration reapplies the known RapidJAM MUX setup and waits 1500ms for ADC settling.
+- [x] Add automatic all-channel idle sampling with up to 30 attempts per voltage read at 50ms intervals.
+- [x] Add unordered full-press capture with automatic channel completion.
+- [x] Add dedicated calibration progress view with physical layout, per-channel status, and collapsible raw result table.
+- [x] Add clickable failed channels for individual retry without rerunning successful channels.
+- [x] Apply valid results to the local draft only; durable storage remains `Save to device`.
+- [ ] Validate the full capture flow on physical RapidJAM. The configurator now retries ADC29 reads up to four times per channel; channels that still fail remain visible as errors instead of aborting the entire run.
+
+### Firmware prerequisite discovered
+
+The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty response when `getHETriggerVoltage` targets RapidJAM's ADC29, while the same endpoint works with ADC28. The GP2040-CE ADC upper-bound checks excluded the final valid ADC GPIO. The following firmware files now include the boundary fix; the RapidJAM firmware must be rebuilt and flashed before automatic calibration can work against ADC29:
+
+- `../GP2040-CE/src/webconfig.cpp`
+- `../GP2040-CE/src/addons/he_trigger.cpp`
+
+## Known Limitations
+
+- The current UI uses MockTransport. It does not yet write to a physical controller.
+- HttpTransport is only a skeleton until the GP2040-CE JSON payloads are wired to the UI model.
+- Hall mm values are currently UI values; conversion to actual ADC thresholds must be handled by the device adapter using calibrated values.
+- GPIO Turbo, Macro, Accelerator, and Brake choices are currently UI model values. Their exact GP2040-CE enum/payload mappings must be confirmed before hardware writes.
+- GPIO physical positions remain approximate and are not currently rendered as separate physical buttons.
+- WebHID and a custom firmware protocol are Phase 2 and are not required for the HTTP/WebConfig integration.
+
+## Planned: Independent Rapid Trigger Controls
+
+### Design
+
+- `HallSetting.release` is the existing Rapid Trigger Threshold value sent as `triggers[i].release`. It remains the normal `Release point` control when Rapid Trigger is disabled and is relabeled `Rapid Trigger Threshold` when Rapid Trigger is enabled.
+- `HallSetting.noise` already round-trips unchanged through `HttpTransport` and `MockTransport`, but is not currently exposed in the RapidJAM UI.
+- `noise` is an ADC delta, not a position. The UI must edit it as a raw integer from 0 to 4095 and must not use the millimeter conversion used by `release`.
+- Both Rapid Trigger controls are shown only when Rapid Trigger is enabled. The existing `Release point` remains visible when it is disabled.
+
+### TODO
+
+- [x] Relabel the existing release slider based on Rapid Trigger state.
+- [x] Add an integer input for `HallSetting.noise` with a 0-4095 range.
+- [x] Preserve the existing HTTP/API mapping without firmware changes.
+- [x] Build and manually verify the RT-enabled and RT-disabled control sets.
+- [ ] Verify Noise Filter readback and save persistence on physical RapidJAM hardware.
+
+## Phase 2: Dedicated USB Configuration
+
+Only proceed after confirming that RapidJAM firmware can be modified and distributed.
+
+1. Add a separate vendor-defined HID configuration interface.
+2. Define a versioned framed protocol with command, transaction ID, chunks, payload length, and CRC/error handling.
+3. Implement WebHidTransport behind the existing transport interface.
+4. Validate reconnects, permission denial, interrupted transfers, old firmware, concurrent game input, and PS4/PS5 modes.
+
+## Relevant Files
+
+- `src/App.tsx`: UI, screens, Save/Discard flow, GPIO and Hall controls.
+- `src/device.ts`: configuration types, defaults, MockTransport, HttpTransport skeleton.
+- `src/styles.css`: layout, physical button coordinates, circular button styling.
+- `../docs/button_layout.txt`: RapidJAM channel and GPIO assignment reference.
+- `../docs/RapidJAM_addons_settings.txt`: RapidJAM Hall/MUX settings reference.
+- `../GP2040-CE/src/webconfig.cpp`: firmware HTTP endpoint implementation.
+- `../GP2040-CE/www/src/Services/WebApi.js`: existing request and response shapes.
+- `../GP2040-CE/proto/config.proto`: persistent configuration schema.
+
+## Verification Checklist
+
+- [ ] Read current configuration from a real device.
+- [ ] Change one GP0-GP5 assignment and preview it.
+- [ ] Discard the change and confirm the device returns to the saved value.
+- [ ] Save the change and confirm it after power cycling.
+- [ ] Read CH0-CH15 Hall values.
+- [ ] Change one Hall threshold and confirm the result in-game.
+- [ ] Confirm CH13's different active threshold is preserved.
+- [ ] Confirm failed saves retain the draft and show an error.
+- [ ] Confirm WebConfig remains usable as a recovery path.
