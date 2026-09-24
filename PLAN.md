@@ -32,6 +32,9 @@
 - [x] Extract `MappingPanel` into `src/components/MappingPanel.tsx`; App retains only callbacks and state ownership.
 - [x] Extract `HallPanel` into `src/components/HallPanel.tsx`; calibration state remains owned by App for now.
 - [x] Extract `CalibrationWorkspace` and `CalibrationPanel` into `src/components/CalibrationWorkspace.tsx`; timing and state ownership remain in App.
+- [x] Remove the duplicated inline Hall/calibration renderers from App; App now composes extracted presentation components.
+- [x] Add `src/transport/createTransport.ts` and remove direct Mock/HTTP transport selection from App.
+- [x] Add `useDeviceConfig.ts` for connection, config snapshots, dirty state, save/discard, restart, preview, and Hall calibration persistence.
 
 ## Phase 1 HTTP Integration
 

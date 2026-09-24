@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, SlidersHorizontal, Usb, Zap } from 'lucide-react'
-import { Action, defaultConfig, DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting, HttpTransport, MockTransport } from './device'
+import { Action, DeviceConfig, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from './device'
 import { ACTIONS, CALIBRATION_BASELINE_ROUNDS, CALIBRATION_BASELINE_WAIT_MS, CALIBRATION_POLL_INTERVAL_MS, CALIBRATION_PRESS_THRESHOLD, CALIBRATION_SAMPLE_TARGET, GPIO_ASSIGNMENTS, GPIO_LABELS, HALL_LABELS } from './config/constants'
 import { rawToMillimeters, secondHighest, secondLowest } from './utils/calibrationMath'
 import type { CalibrationProgress, CalibrationResult, CalibrationResults, CalibrationStage } from './types/calibration'
@@ -9,10 +9,10 @@ import { SettingNumber, SettingSlider } from './components/SettingControls'
 import { MappingPanel as MappingPanelComponent } from './components/MappingPanel'
 import { HallPanel as HallPanelComponent } from './components/HallPanel'
 import { CalibrationPanel as CalibrationPanelComponent, CalibrationWorkspace as CalibrationWorkspaceComponent } from './components/CalibrationWorkspace'
+import { createTransport } from './transport/createTransport'
+import { useDeviceConfig } from './hooks/useDeviceConfig'
 
-const transport: DeviceTransport = new URLSearchParams(window.location.search).get('transport') === 'http'
-  ? new HttpTransport('/rapidjam-api')
-  : new MockTransport()
+const transport: DeviceTransport = createTransport()
 const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
 const hallLabels = HALL_LABELS
 const gpioLabels = GPIO_LABELS
@@ -22,16 +22,10 @@ const rawToMm = rawToMillimeters
 const calibrationPollIntervalMs = CALIBRATION_POLL_INTERVAL_MS
 
 export function App() {
-  const [device, setDevice] = useState<DeviceInfo | null>(null)
-  const [config, setConfig] = useState<DeviceConfig>(structuredClone(defaultConfig))
-  const [savedConfig, setSavedConfig] = useState<DeviceConfig>(structuredClone(defaultConfig))
+  const deviceConfig = useDeviceConfig(transport)
+  const { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateConfig, updateMapping, updateHall, updateGpio, save, discard, saveHallCalibration } = deviceConfig
   const [activeButton, setActiveButton] = useState<HallChannel>('ch14')
   const [section, setSection] = useState<'mapping' | 'hall'>('mapping')
-  const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState('')
-  const [diagnostic, setDiagnostic] = useState('')
-  const [connectionFailed, setConnectionFailed] = useState(false)
-  const [restartComplete, setRestartComplete] = useState(false)
   const [calibrationStage, setCalibrationStage] = useState<CalibrationStage>('idle')
   const [calibrationResults, setCalibrationResults] = useState<CalibrationResults | null>(null)
   const [calibrationProgress, setCalibrationProgress] = useState<CalibrationProgress>({ phase: 'Idle', channel: null, attempt: 0, successful: 0, total: 16 })
@@ -41,83 +35,7 @@ export function App() {
   const calibrationSkipped = useRef(new Set<HallChannel>())
   const calibrationCancelled = useRef(false)
 
-  const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig)
   const activeHall = config.hall[activeButton]
-
-  useEffect(() => {
-    void connect()
-  }, [])
-
-  async function connect() {
-    setBusy(true)
-    try {
-      const info = await transport.connect()
-      const next = await transport.readConfig()
-      setDevice(info)
-      setConfig(next)
-      setSavedConfig(structuredClone(next))
-      setNotice('Ready to configure')
-      setConnectionFailed(false)
-      setRestartComplete(false)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to connect'
-      setNotice(message)
-      setDiagnostic(`${new Date().toLocaleTimeString()}  ${message}`)
-      setConnectionFailed(true)
-    } finally { setBusy(false) }
-  }
-
-  async function restartToGamepad() {
-    setBusy(true)
-    try {
-      await transport.restartToGamepad()
-      setDevice(null)
-      setRestartComplete(true)
-      setNotice('RapidJAM is restarting in gamepad mode')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to restart RapidJAM'
-      setNotice(message)
-      setDiagnostic(`${new Date().toLocaleTimeString()}  ${message}`)
-    } finally { setBusy(false) }
-  }
-
-  async function updateConfig(next: DeviceConfig) {
-    setConfig(next)
-    try {
-      await transport.previewConfig(next)
-      setNotice('Preview active on device')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Preview failed') }
-  }
-
-  function updateMapping(button: HallChannel, action: Action) {
-    void updateConfig({ ...config, hallMappings: { ...config.hallMappings, [button]: action } })
-  }
-
-  function updateHall(button: HallChannel, patch: Partial<HallSetting>) {
-    void updateConfig({ ...config, hall: { ...config.hall, [button]: { ...config.hall[button], ...patch } } })
-  }
-
-  function updateGpio(button: GpioPin, action: GpioAssignment) {
-    void updateConfig({ ...config, gpioMappings: { ...config.gpioMappings, [button]: action } })
-  }
-
-  async function save() {
-    setBusy(true)
-    try {
-      await transport.commitConfig(config)
-      const confirmed = await transport.readConfig()
-      setConfig(confirmed)
-      setSavedConfig(structuredClone(confirmed))
-      setNotice('Saved to RapidJAM')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Save failed') }
-    finally { setBusy(false) }
-  }
-
-  async function discard() {
-    await transport.discardPreview()
-    setConfig(structuredClone(savedConfig))
-    setNotice('Changes discarded')
-  }
 
   async function startCalibration() {
     if (!transport.supportsLiveHallCalibration()) {
@@ -258,24 +176,13 @@ export function App() {
       setNotice('No completed calibration results to apply')
       return
     }
-    setBusy(true)
     try {
-      await transport.saveHallCalibration(patches)
       const nextConfig = { ...config, hall: nextHall }
-      setConfig(nextConfig)
-      setSavedConfig((current) => {
-        const next = structuredClone(current)
-        Object.entries(patches).forEach(([id, patch]) => {
-          if (!patch) return
-          next.hall[id as HallChannel] = { ...next.hall[id as HallChannel], ...nextHall[id as HallChannel], noise: next.hall[id as HallChannel].noise, rapidTrigger: next.hall[id as HallChannel].rapidTrigger }
-        })
-        return next
-      })
+      await saveHallCalibration(patches, nextConfig)
       setCalibrationStage('idle')
-      setNotice('Calibration results saved to RapidJAM')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Calibration save failed')
-    } finally { setBusy(false) }
+    }
   }
 
   function cancelCalibration() {
@@ -369,24 +276,5 @@ export function App() {
 
     <footer className="actionbar" inert={connectionFailed || restartComplete || undefined}><div className="draft-state">{dirty ? <><span className="draft-dot" />Unsaved changes</> : <><Check size={15} />All changes saved</>}<span className="separator" />{device?.transport === 'mock' ? 'Demo device' : 'RapidJAM'}</div><div className="actions"><button className="secondary-button" onClick={() => void discard()} disabled={!dirty || busy}><RotateCcw size={16} />Discard</button><button className="primary-button" onClick={() => void save()} disabled={!dirty || busy}><Save size={16} />{busy ? 'Saving...' : 'Save to device'}</button></div></footer>
   </div>
-}
-
-function HallPanel({ config, savedConfig, activeButton, hall, onSelect, onChange, calibrationStage, calibrationResults, calibrationAvailable, onStartCalibration, onFinishCalibration, onApplyCalibration, onCancelCalibration }: { config: DeviceConfig, savedConfig: DeviceConfig, activeButton: HallChannel, hall: HallSetting, onSelect: (id: HallChannel) => void, onChange: (id: HallChannel, patch: Partial<HallSetting>) => void, calibrationStage: CalibrationStage, calibrationResults: CalibrationResults | null, calibrationAvailable: boolean, onStartCalibration: () => void, onFinishCalibration: () => void, onApplyCalibration: () => void, onCancelCalibration: () => void }) {
-  return <div className="hall-stack"><div className="hall-layout"><div className="hall-preview"><div className="panel-topline"><span>KEY SELECTOR · ADC29</span><span className="live-chip"><span />Live signal</span></div><Controller config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={onSelect} /><div className="travel-meter"><div className="meter-label"><span>{activeButton.toUpperCase()} · {hallLabels[activeButton]} travel</span><strong>{hall.press.toFixed(2)} mm</strong></div><div className="meter-track"><div style={{ width: `${Math.min(100, hall.press / 1.5 * 100)}%` }} /></div><div className="meter-scale"><span>0.0</span><span>0.75</span><span>1.5 mm</span></div></div></div><div className="hall-editor"><div className="selected-label">EDITING</div><h2>{activeButton.toUpperCase()} <span>· {hallLabels[activeButton]}</span></h2><SettingSlider label="Press point" value={hall.press} onChange={(value) => onChange(activeButton, { press: value })} /><SettingSlider label={hall.rapidTrigger ? "Rapid Trigger Threshold" : "Release point"} value={hall.release} onChange={(value) => onChange(activeButton, { release: value })} />{hall.rapidTrigger && <SettingNumber label="Rapid Trigger Noise Filter" value={hall.noise} min={0} max={4095} onChange={(value) => onChange(activeButton, { noise: value })} />}<label className="toggle-row"><span><strong>Rapid Trigger</strong><small>Reset as soon as the key moves upward</small></span><input type="checkbox" checked={hall.rapidTrigger} onChange={(event) => onChange(activeButton, { rapidTrigger: event.target.checked })} /><span className="toggle" /></label><button className="calibrate-button" onClick={onStartCalibration} disabled={!calibrationAvailable}>Calibrate all Hall buttons <ChevronRight size={16} /></button>{!calibrationAvailable && <p className="calibration-unavailable">Live calibration is disabled until firmware supports ADC29 voltage reads.</p>}</div></div><CalibrationPanel stage={calibrationStage} results={calibrationResults} onFinish={onFinishCalibration} onApply={onApplyCalibration} onCancel={onCancelCalibration} /></div>
-}
-
-function CalibrationWorkspace({ config, savedConfig, stage, results, progress, onCircleClick, onFinish, onApply, onCancel }: { config: DeviceConfig, savedConfig: DeviceConfig, stage: CalibrationStage, results: CalibrationResults, progress: CalibrationProgress, onCircleClick: (channel: HallChannel) => void, onFinish: () => void, onApply: () => void, onCancel: () => void }) {
-  const rows = Object.entries(results) as [HallChannel, CalibrationResult][]
-  const complete = rows.filter(([, result]) => result.status === 'complete' || result.status === 'skipped').length
-  const failed = rows.filter(([, result]) => result.status === 'error')
-  const title = stage === 'baseline' ? 'Measuring idle position' : stage === 'capture' ? `Press each button once · ${complete}/16 complete` : stage === 'review' ? 'Review calibration results' : 'Calibration error'
-  return <div className={`calibration-workspace calibration-stage-${stage}`}><div className="calibration-page-header"><div><p className="eyebrow">MAGNETIC INPUT / CALIBRATION</p><h1>{title}</h1><p className="lede">{stage === 'baseline' ? 'Leave all buttons untouched while every channel is measured.' : stage === 'capture' ? 'Yellow buttons need a press. Click yellow to skip or green to remeasure.' : 'Review the measured values before applying them to the draft.'}</p></div><button className="secondary-button" onClick={onCancel}>Cancel</button></div><div className="calibration-live-status"><strong>{progress.phase}</strong><span>{progress.channel === null ? 'Preparing...' : `CH${progress.channel} · ${hallLabels[`ch${progress.channel}` as HallChannel]}`}</span><span>Attempt {progress.attempt || '—'} / 30</span><span>{progress.successful} / {progress.total} complete</span></div><div className="calibration-page-grid"><div className="preview-panel"><div className="panel-topline"><span>PHYSICAL PROGRESS · CH IDs</span></div><Controller config={config} savedConfig={savedConfig} activeButton="ch14" calibrationMode calibrationResults={results} readingChannel={progress.channel} onSelect={onCircleClick} /><div className="calibration-progress"><strong>{complete} / 16 complete</strong><span>{failed.length ? `${failed.length} failed` : 'Blue = reading now · Yellow = skip · Green = complete'}</span></div></div><div className="calibration-status-panel"><div className="selected-label">CHANNEL STATUS</div><div className="calibration-status-list">{rows.map(([id, result]) => <button key={id} className={`calibration-status-item ${result.status}`} onClick={() => onCircleClick(id)}><span>{id.toUpperCase()} · {hallLabels[id]}</span><strong>{result.status}</strong><small>{result.attempt ? `Attempt ${result.attempt}/30` : result.sampleCount ? `${result.sampleCount} samples` : result.latestVoltage !== undefined ? `${result.latestVoltage} ADC` : result.error ?? '—'}</small></button>)}</div>{stage === 'capture' && <button className="secondary-button" onClick={onFinish}>Finish capture and review</button>}{stage === 'review' && <button className="primary-button" onClick={onApply}>Apply results to draft</button>}</div></div><details className="calibration-results" open={stage === 'review'}><summary>Raw calibration results</summary><div className="calibration-table"><div className="calibration-row calibration-header"><span>CH</span><span>Button</span><span>Idle</span><span>Pressed</span><span>Span</span><span>Samples</span><span>Latest</span><span>Status</span></div>{rows.map(([id, result]) => <div className={`calibration-row ${result.status}`} key={id}><span>{id.toUpperCase()}</span><span>{hallLabels[id]}</span><span>{result.idle}</span><span>{result.pressed ?? '—'}</span><span>{result.pressed === null ? '—' : Math.abs(result.pressed - result.idle)}</span><span>{result.sampleCount ?? 0}</span><span>{result.latestVoltage ?? '—'}</span><span>{result.error ?? result.status}</span></div>)}</div></details></div>
-}
-
-function CalibrationPanel({ stage, results, onFinish, onApply, onCancel }: { stage: CalibrationStage, results: CalibrationResults | null, onFinish: () => void, onApply: () => void, onCancel: () => void }) {
-  if (stage === 'idle') return null
-  const rows = results ? Object.entries(results) as [HallChannel, CalibrationResult][] : []
-  const complete = rows.filter(([, result]) => result.status === 'complete').length
-  return <section className="calibration-panel"><div className="calibration-heading"><div><div className="selected-label">AUTOMATIC CALIBRATION</div><h2>{stage === 'baseline' ? 'Measuring idle position' : stage === 'capture' ? `Press each button once · ${complete}/16 complete` : stage === 'review' ? 'Review calibration results' : 'Calibration error'}</h2></div>{stage !== 'baseline' && <button className="text-button" onClick={onCancel}>Cancel</button>}</div>{stage === 'baseline' && <p className="calibration-instruction">Leave all Hall buttons untouched. The configurator is sampling every channel automatically.</p>}{stage === 'capture' && <><p className="calibration-instruction">Press each button fully once, in any order. Completed buttons turn green.</p><button className="secondary-button" onClick={onFinish}>Finish capture and review</button></>}{stage === 'review' && <button className="primary-button" onClick={onApply}>Apply calibration results to draft</button>}<details className="calibration-results" open={stage === 'review'}><summary>Calibration results</summary><div className="calibration-table"><div className="calibration-row calibration-header"><span>CH</span><span>Button</span><span>Idle</span><span>Pressed</span><span>Span</span><span>Polarity</span><span>Status</span></div>{rows.map(([id, result]) => <div className={`calibration-row ${result.status}`} key={id}><span>{id.toUpperCase()}</span><span>{hallLabels[id]}</span><span>{result.idle}</span><span>{result.pressed ?? '—'}</span><span>{result.pressed === null ? '—' : Math.abs(result.pressed - result.idle)}</span><span>{result.polarity ?? '—'}</span><span>{result.status}</span></div>)}</div></details></section>
 }
 
