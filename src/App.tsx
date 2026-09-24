@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, SlidersHorizontal, Usb, Zap } from 'lucide-react'
-import { Action, defaultConfig, DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallChannel, HallSetting, HttpTransport, MockTransport } from './device'
+import { Action, defaultConfig, DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting, HttpTransport, MockTransport } from './device'
 import { ACTIONS, CALIBRATION_BASELINE_ROUNDS, CALIBRATION_BASELINE_WAIT_MS, CALIBRATION_POLL_INTERVAL_MS, CALIBRATION_PRESS_THRESHOLD, CALIBRATION_SAMPLE_TARGET, GPIO_ASSIGNMENTS, GPIO_LABELS, HALL_LABELS } from './config/constants'
 import { rawToMillimeters, secondHighest, secondLowest } from './utils/calibrationMath'
 import type { CalibrationProgress, CalibrationResult, CalibrationResults, CalibrationStage } from './types/calibration'
@@ -237,9 +237,10 @@ export function App() {
       setNotice('Review calibration results')
   }
 
-  function applyCalibration() {
-    if (!calibrationResults) return
+  async function applyCalibration() {
+    if (!calibrationResults || busy) return
     const nextHall = { ...config.hall }
+    const patches: Partial<Record<HallChannel, HallCalibrationPatch>> = {}
     Object.entries(calibrationResults).forEach(([key, result]) => {
       if (result.status !== 'complete' || result.pressed === null || result.polarity === null) return
       const id = key as HallChannel
@@ -250,11 +251,31 @@ export function App() {
       const releaseFraction = Math.max(0.05, Math.min(0.95, Math.abs(old.release - old.idle) / Math.max(1, Math.abs(old.pressed - old.idle))))
       const activeRaw = Math.round(result.idle + sign * span * activeFraction)
       const releaseRaw = Math.round(result.idle + sign * span * releaseFraction)
-      nextHall[id] = { ...old, idle: result.idle, pressed: result.pressed, active: activeRaw, threshold: releaseRaw, release: rawToMm(releaseRaw, result.idle, result.pressed), polarity: result.polarity, calibrated: true }
+      nextHall[id] = { ...old, idle: result.idle, pressed: result.pressed, active: activeRaw, threshold: releaseRaw, press: rawToMm(activeRaw, result.idle, result.pressed), release: rawToMm(releaseRaw, result.idle, result.pressed), polarity: result.polarity, calibrated: true }
+      patches[id] = { idle: result.idle, active: activeRaw, pressed: result.pressed, threshold: releaseRaw, polarity: result.polarity }
     })
-    void updateConfig({ ...config, hall: nextHall })
-    setCalibrationStage('idle')
-    setNotice('Calibration results applied to draft')
+    if (!Object.keys(patches).length) {
+      setNotice('No completed calibration results to apply')
+      return
+    }
+    setBusy(true)
+    try {
+      await transport.saveHallCalibration(patches)
+      const nextConfig = { ...config, hall: nextHall }
+      setConfig(nextConfig)
+      setSavedConfig((current) => {
+        const next = structuredClone(current)
+        Object.entries(patches).forEach(([id, patch]) => {
+          if (!patch) return
+          next.hall[id as HallChannel] = { ...next.hall[id as HallChannel], ...nextHall[id as HallChannel], noise: next.hall[id as HallChannel].noise, rapidTrigger: next.hall[id as HallChannel].rapidTrigger }
+        })
+        return next
+      })
+      setCalibrationStage('idle')
+      setNotice('Calibration results saved to RapidJAM')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Calibration save failed')
+    } finally { setBusy(false) }
   }
 
   function cancelCalibration() {

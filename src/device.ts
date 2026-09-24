@@ -23,6 +23,14 @@ export interface DeviceConfig {
   hall: Record<HallChannel, HallSetting>
 }
 
+export interface HallCalibrationPatch {
+  idle: number
+  active: number
+  pressed: number
+  threshold: number
+  polarity: 'N' | 'P'
+}
+
 export interface DeviceInfo {
   product: string
   firmware: string
@@ -38,6 +46,7 @@ export interface DeviceTransport {
   readHallVoltage(channel: number, onAttempt?: (attempt: number) => void): Promise<number>
   previewConfig(config: DeviceConfig): Promise<void>
   commitConfig(config: DeviceConfig): Promise<void>
+  saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void>
   discardPreview(): Promise<void>
   disconnect(): Promise<void>
 }
@@ -92,6 +101,19 @@ export class MockTransport implements DeviceTransport {
   async readHallVoltage(channel: number): Promise<number> { return this.config.hall[`ch${channel}` as HallChannel].idle }
   async previewConfig(config: DeviceConfig): Promise<void> { this.preview = cloneConfig(config) }
   async commitConfig(config: DeviceConfig): Promise<void> { this.config = cloneConfig(config); this.preview = null }
+  async saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void> {
+    Object.entries(patches).forEach(([id, patch]) => {
+      if (!patch) return
+      const current = this.config.hall[id as HallChannel]
+      this.config.hall[id as HallChannel] = {
+        ...current,
+        ...patch,
+        press: rawToMillimeters(patch.active, patch.idle, patch.pressed),
+        release: rawToMillimeters(patch.threshold, patch.idle, patch.pressed),
+        calibrated: patch.idle !== patch.pressed,
+      }
+    })
+  }
   async discardPreview(): Promise<void> { this.preview = null }
   async disconnect(): Promise<void> { this.preview = null }
 }
@@ -235,6 +257,24 @@ export class HttpTransport implements DeviceTransport {
         rapidTrigger: setting.rapidTrigger ? 1 : 0,
       }
     }
+    await this.request('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
+  }
+  async saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void> {
+    const calibrationResponse = await this.request<{ triggers: Array<Record<string, number>> }>('/api/getHETriggerCalibrations')
+    const triggers = calibrationResponse.triggers
+    Object.entries(patches).forEach(([id, patch]) => {
+      if (!patch) return
+      const channel = Number(id.slice(2))
+      const existing = triggers[channel] ?? {}
+      triggers[channel] = {
+        ...existing,
+        idle: patch.idle,
+        active: patch.active,
+        pressed: patch.pressed,
+        is_polarized: patch.polarity === 'P' ? 1 : 0,
+        release: patch.threshold,
+      }
+    })
     await this.request('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
   }
   async discardPreview(): Promise<void> {}
