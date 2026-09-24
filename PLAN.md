@@ -27,6 +27,8 @@
   - GP5: Fn
 - [x] GPIO assignment choices added for standard actions, Turbo, Macro, Accelerator, Brake, Home, Menu actions, and Fn.
 - [x] Production build passes with `npm run build`.
+- [x] Refactor Phase 1 started: shared constants, calibration types, and pure calibration math modules added without changing runtime behavior.
+- [x] Refactor Phase 2 started: controller and setting-input renderers extracted into `src/components/` without moving state or transport logic.
 
 ## Phase 1 HTTP Integration
 

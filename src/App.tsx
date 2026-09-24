@@ -1,26 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, SlidersHorizontal, Usb, Zap } from 'lucide-react'
 import { Action, defaultConfig, DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallChannel, HallSetting, HttpTransport, MockTransport } from './device'
+import { ACTIONS, CALIBRATION_BASELINE_ROUNDS, CALIBRATION_BASELINE_WAIT_MS, CALIBRATION_POLL_INTERVAL_MS, CALIBRATION_PRESS_THRESHOLD, CALIBRATION_SAMPLE_TARGET, GPIO_ASSIGNMENTS, GPIO_LABELS, HALL_LABELS } from './config/constants'
+import { rawToMillimeters, secondHighest, secondLowest } from './utils/calibrationMath'
+import type { CalibrationProgress, CalibrationResult, CalibrationResults, CalibrationStage } from './types/calibration'
+import { ControllerDisplay as Controller } from './components/ControllerDisplay'
+import { SettingNumber, SettingSlider } from './components/SettingControls'
 
 const transport: DeviceTransport = new URLSearchParams(window.location.search).get('transport') === 'http'
   ? new HttpTransport('/rapidjam-api')
   : new MockTransport()
-const hallLabels: Record<HallChannel, string> = { ch0: 'B2', ch1: 'R2', ch2: 'L2', ch3: 'B3', ch4: 'B4', ch5: 'R1', ch6: 'L1', ch7: 'S1', ch8: 'LEFT', ch9: 'DOWN', ch10: 'L3', ch11: 'UP', ch12: 'RIGHT', ch13: 'S2', ch14: 'B1', ch15: 'R3' }
-const gpioLabels: Record<GpioPin, string> = { gp0: 'GP0', gp1: 'GP1', gp2: 'GP2', gp3: 'GP3', gp4: 'GP4', gp5: 'GP5' }
-const actions: Action[] = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'B1', 'B2', 'B3', 'B4', 'L1', 'R1', 'L2', 'R2', 'L3', 'R3', 'S1', 'S2', 'A1', 'A2', 'NONE']
-const gpioAssignments: Array<{ value: GpioAssignment, label: string }> = [
-  ...actions.map((action) => ({ value: action, label: action === 'NONE' ? 'Unassigned' : action })),
-  { value: 'TURBO_B1', label: 'Turbo · B1' }, { value: 'TURBO_B2', label: 'Turbo · B2' }, { value: 'TURBO_B3', label: 'Turbo · B3' }, { value: 'TURBO_B4', label: 'Turbo · B4' },
-  { value: 'MACRO_1', label: 'Macro 1' }, { value: 'MACRO_2', label: 'Macro 2' }, { value: 'MACRO_3', label: 'Macro 3' }, { value: 'MACRO_4', label: 'Macro 4' },
-  { value: 'ACCELERATOR', label: 'Accelerator' }, { value: 'BRAKE', label: 'Brake' }, { value: 'HOME', label: 'Home' }, { value: 'MENU_DOWN', label: 'Menu Down' }, { value: 'MENU_SELECT', label: 'Menu Select' }, { value: 'MENU_BACK', label: 'Menu Back' }, { value: 'FN', label: 'Function (Fn)' },
-]
-const rawToMm = (value: number, idle: number, pressed: number): number => Math.max(0.05, Math.min(1.5, Math.abs(value - idle) / Math.max(1, Math.abs(pressed - idle)) * 1.5))
 const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
-const calibrationPollIntervalMs = 250
-type CalibrationStage = 'idle' | 'baseline' | 'capture' | 'review' | 'error'
-type CalibrationResult = { idle: number, pressed: number | null, polarity: 'N' | 'P' | null, status: 'preparing' | 'waiting' | 'pressing' | 'complete' | 'skipped' | 'unstable' | 'error', attempt?: number, sampleCount?: number, latestVoltage?: number, error?: string }
-type CalibrationResults = Record<HallChannel, CalibrationResult>
-type CalibrationProgress = { phase: string, channel: number | null, attempt: number, successful: number, total: number }
+const hallLabels = HALL_LABELS
+const gpioLabels = GPIO_LABELS
+const actions = ACTIONS
+const gpioAssignments = GPIO_ASSIGNMENTS
+const rawToMm = rawToMillimeters
+const calibrationPollIntervalMs = CALIBRATION_POLL_INTERVAL_MS
 
 export function App() {
   const [device, setDevice] = useState<DeviceInfo | null>(null)
@@ -351,11 +347,6 @@ export function App() {
   </div>
 }
 
-function Controller({ config, savedConfig, activeButton, onSelect, calibrationMode = false, calibrationResults, readingChannel = null }: { config: DeviceConfig, savedConfig: DeviceConfig, activeButton: HallChannel, onSelect: (id: HallChannel) => void, calibrationMode?: boolean, calibrationResults?: CalibrationResults, readingChannel?: number | null }) {
-  const layout: HallChannel[] = ['ch7', 'ch6', 'ch5', 'ch4', 'ch3', 'ch2', 'ch8', 'ch9', 'ch11', 'ch12', 'ch14', 'ch0', 'ch1', 'ch15', 'ch10', 'ch13']
-  return <div className="controller"><div className="controller-brand">RAPID<span>JAM</span><small>MAGNETIC INPUT · ADC29</small></div><div className="button-grid">{layout.map((id) => { const changed = config.hallMappings[id] !== savedConfig.hallMappings[id] || JSON.stringify(config.hall[id]) !== JSON.stringify(savedConfig.hall[id]); const state = calibrationResults?.[id]?.status; const reading = calibrationMode && readingChannel === Number(id.slice(2)); return <button key={id} className={`controller-key key-${id} ${activeButton === id ? 'active' : ''} ${changed ? 'changed' : ''} ${calibrationMode && state ? `calibration-${state}` : ''} ${reading ? 'calibration-reading' : ''}`} onClick={() => onSelect(id)}><span>{calibrationMode ? id.toUpperCase() : config.hallMappings[id]}</span></button> })}</div><div className="controller-edge" /></div>
-}
-
 function MappingPanel({ config, savedConfig, activeButton, onSelect, onChange, onGpioChange }: { config: DeviceConfig, savedConfig: DeviceConfig, activeButton: HallChannel, onSelect: (id: HallChannel) => void, onChange: (id: HallChannel, action: Action) => void, onGpioChange: (id: GpioPin, action: GpioAssignment) => void }) {
   return <div className="mapping-stack"><div className="panel-grid"><div className="preview-panel"><div className="panel-topline"><span>LIVE PREVIEW · HALL CH 0–15</span><span className="live-chip"><span />Connected</span></div><Controller config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={onSelect} /><p className="helper"><SlidersHorizontal size={15} /> Select a channel to edit its assignment</p></div><div className="editor-panel"><div className="selected-label">SELECTED CHANNEL</div><h2>{activeButton.toUpperCase()} <span>· {hallLabels[activeButton]}</span></h2><label className="field-label" htmlFor="action">Gamepad action</label><select id="action" value={config.hallMappings[activeButton]} onChange={(event) => onChange(activeButton, event.target.value as Action)}>{actions.map((action) => <option key={action} value={action}>{action === 'NONE' ? 'Disabled' : action}</option>)}</select><div className="info-box"><Zap size={16} /><div><strong>Physical Hall channel</strong><p>ADC29 · 16-channel multiplexer · Select pins 13 / 14 / 15 / 26</p></div></div></div></div><div className="gpio-panel"><div><div className="selected-label">GPIO ASSIGNMENTS · GP0–GP5</div><p>GP13–GP15, GP25–GP26 and GP29 are reserved for add-ons and are hidden.</p></div><div className="gpio-grid">{(Object.keys(gpioLabels) as GpioPin[]).map((id) => <label className={config.gpioMappings[id] !== savedConfig.gpioMappings[id] ? 'changed' : ''} key={id}><span>{gpioLabels[id]}</span><select value={config.gpioMappings[id]} onChange={(event) => onGpioChange(id, event.target.value as GpioAssignment)}>{gpioAssignments.map((assignment) => <option key={assignment.value} value={assignment.value}>{assignment.label}</option>)}</select></label>)}</div></div></div>
 }
@@ -379,10 +370,3 @@ function CalibrationPanel({ stage, results, onFinish, onApply, onCancel }: { sta
   return <section className="calibration-panel"><div className="calibration-heading"><div><div className="selected-label">AUTOMATIC CALIBRATION</div><h2>{stage === 'baseline' ? 'Measuring idle position' : stage === 'capture' ? `Press each button once · ${complete}/16 complete` : stage === 'review' ? 'Review calibration results' : 'Calibration error'}</h2></div>{stage !== 'baseline' && <button className="text-button" onClick={onCancel}>Cancel</button>}</div>{stage === 'baseline' && <p className="calibration-instruction">Leave all Hall buttons untouched. The configurator is sampling every channel automatically.</p>}{stage === 'capture' && <><p className="calibration-instruction">Press each button fully once, in any order. Completed buttons turn green.</p><button className="secondary-button" onClick={onFinish}>Finish capture and review</button></>}{stage === 'review' && <button className="primary-button" onClick={onApply}>Apply calibration results to draft</button>}<details className="calibration-results" open={stage === 'review'}><summary>Calibration results</summary><div className="calibration-table"><div className="calibration-row calibration-header"><span>CH</span><span>Button</span><span>Idle</span><span>Pressed</span><span>Span</span><span>Polarity</span><span>Status</span></div>{rows.map(([id, result]) => <div className={`calibration-row ${result.status}`} key={id}><span>{id.toUpperCase()}</span><span>{hallLabels[id]}</span><span>{result.idle}</span><span>{result.pressed ?? '—'}</span><span>{result.pressed === null ? '—' : Math.abs(result.pressed - result.idle)}</span><span>{result.polarity ?? '—'}</span><span>{result.status}</span></div>)}</div></details></section>
 }
 
-function SettingSlider({ label, value, onChange }: { label: string, value: number, onChange: (value: number) => void }) {
-  return <div className="slider-field"><div className="slider-label"><label htmlFor={label}>{label}</label><output>{value.toFixed(2)} mm</output></div><input id={label} type="range" min="0.05" max="1.5" step="0.05" value={value} onChange={(event) => onChange(Number(event.target.value))} /></div>
-}
-
-function SettingNumber({ label, value, min, max, onChange }: { label: string, value: number, min: number, max: number, onChange: (value: number) => void }) {
-  return <div className="slider-field"><div className="slider-label"><label htmlFor={label}>{label}</label><output>{value}</output></div><input id={label} type="number" min={min} max={max} step="1" value={value} onChange={(event) => onChange(Math.max(min, Math.min(max, Number(event.target.value))))} /></div>
-}
