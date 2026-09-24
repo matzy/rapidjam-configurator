@@ -102,18 +102,28 @@ export class HttpTransport implements DeviceTransport {
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${path}`
     const method = options?.method ?? 'GET'
-    console.info(`[RapidJAM HTTP] ${method} ${url}`)
-    let response: Response
-    try {
-      response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } })
-    } catch (error) {
-      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      console.error(`[RapidJAM HTTP] network failure ${method} ${url}`, error)
-      throw new Error(`Cannot reach ${url}. ${detail}. Check WebConfig/RNDIS mode and the 192.168.7.1 route.`)
+    let lastError: Error | null = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      console.info(`[RapidJAM HTTP] ${method} ${url} (attempt ${attempt}/3)`)
+      try {
+        const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } })
+        console.info(`[RapidJAM HTTP] ${response.status} ${method} ${url}`)
+        if (!response.ok) throw new Error(`Device request failed (${response.status}) at ${url}`)
+        const body = await response.text()
+        try {
+          return JSON.parse(body) as T
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error)
+          console.error(`[RapidJAM HTTP] invalid JSON from ${url}: length=${body.length}, tail=${body.slice(-120)}`, error)
+          throw new Error(`Invalid JSON from ${url}: ${detail}`)
+        }
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        if (attempt < 3) await calibrationWait(150)
+      }
     }
-    console.info(`[RapidJAM HTTP] ${response.status} ${method} ${url}`)
-    if (!response.ok) throw new Error(`Device request failed (${response.status}) at ${url}`)
-    return response.json() as Promise<T>
+    if (lastError?.message.includes('Cannot reach')) throw lastError
+    throw new Error(lastError?.message ?? `Request failed: ${method} ${url}`)
   }
 
   async connect(): Promise<DeviceInfo> {
