@@ -35,6 +35,11 @@
 - [x] Remove the duplicated inline Hall/calibration renderers from App; App now composes extracted presentation components.
 - [x] Add `src/transport/createTransport.ts` and remove direct Mock/HTTP transport selection from App.
 - [x] Add `useDeviceConfig.ts` for connection, config snapshots, dirty state, save/discard, restart, preview, and Hall calibration persistence.
+- [x] Add the initial `useHallCalibration.ts` state/buffer boundary; async loop integration remains the next refactor slice.
+- [x] Connect App calibration state and mutable buffers to `useHallCalibration`; the existing loop remains temporarily in App for behavior preservation.
+- [x] Move the active baseline/capture polling loop into `useHallCalibration`; App no longer starts the legacy loop.
+- [x] Centralize complete/skip-to-review detection in `useHallCalibration` and check it after each channel/pass.
+- [x] Remove the transitional dead calibration functions, refs, loops, and setter aliases from App; `useHallCalibration` is now the single calibration owner.
 
 ## Phase 1 HTTP Integration
 
