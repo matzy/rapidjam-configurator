@@ -29,6 +29,9 @@
 - [x] Production build passes with `npm run build`.
 - [x] Refactor Phase 1 started: shared constants, calibration types, and pure calibration math modules added without changing runtime behavior.
 - [x] Refactor Phase 2 started: controller and setting-input renderers extracted into `src/components/` without moving state or transport logic.
+- [x] Extract `MappingPanel` into `src/components/MappingPanel.tsx`; App retains only callbacks and state ownership.
+- [x] Extract `HallPanel` into `src/components/HallPanel.tsx`; calibration state remains owned by App for now.
+- [x] Extract `CalibrationWorkspace` and `CalibrationPanel` into `src/components/CalibrationWorkspace.tsx`; timing and state ownership remain in App.
 
 ## Phase 1 HTTP Integration
 
