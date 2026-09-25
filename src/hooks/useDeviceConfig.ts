@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from '../device'
+import type { DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting, InputModeConfig, KeyboardAction } from '../device'
 import { defaultConfig } from '../device'
 
 export function useDeviceConfig(transport: DeviceTransport) {
@@ -69,6 +69,14 @@ export function useDeviceConfig(transport: DeviceTransport) {
     void updateConfig({ ...config, gpioMappings: { ...config.gpioMappings, [button]: action } })
   }
 
+  function updateInputMode(patch: Partial<InputModeConfig>) {
+    void updateConfig({ ...config, inputMode: { ...config.inputMode, ...patch } })
+  }
+
+  function updateKeyboardMapping(action: KeyboardAction, key: number) {
+    void updateConfig({ ...config, keyboardMappings: { ...config.keyboardMappings, [action]: key } })
+  }
+
   async function save() {
     setBusy(true)
     try {
@@ -100,5 +108,5 @@ export function useDeviceConfig(transport: DeviceTransport) {
     } finally { setBusy(false) }
   }
 
-  return { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateConfig, updateMapping, updateHall, updateGpio, save, discard, saveHallCalibration }
+  return { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateConfig, updateMapping, updateHall, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration }
 }

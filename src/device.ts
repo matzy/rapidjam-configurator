@@ -3,6 +3,26 @@ export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4
 export type HallChannel = `ch${number}`
 export type GpioPin = `gp${0 | 1 | 2 | 3 | 4 | 5}`
 export type GpioAssignment = Action | 'TURBO_B1' | 'TURBO_B2' | 'TURBO_B3' | 'TURBO_B4' | 'MACRO_1' | 'MACRO_2' | 'MACRO_3' | 'MACRO_4' | 'ACCELERATOR' | 'BRAKE' | 'HOME' | 'MENU_DOWN' | 'MENU_SELECT' | 'MENU_BACK' | 'FN'
+export type KeyboardAction = 'Up' | 'Down' | 'Left' | 'Right' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'S1' | 'S2' | 'L3' | 'R3' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12'
+
+export interface InputModeConfig {
+  inputMode: number
+  inputDeviceType: number
+  ps4AuthType: number
+  ps5AuthType: number
+  xinputAuthType: number
+  ps4ControllerIDMode: number
+  switchTpShareForDs4: boolean
+  usbDescOverride: boolean
+  usbDescProduct: string
+  usbDescManufacturer: string
+  usbDescVersion: string
+  usbOverrideID: boolean
+  usbVendorID: string
+  usbProductID: string
+}
+
+export type KeyboardMappings = Record<KeyboardAction, number>
 
 export interface HallSetting {
   idle: number
@@ -21,6 +41,8 @@ export interface DeviceConfig {
   hallMappings: Record<HallChannel, Action>
   gpioMappings: Record<GpioPin, GpioAssignment>
   hall: Record<HallChannel, HallSetting>
+  inputMode: InputModeConfig
+  keyboardMappings: KeyboardMappings
 }
 
 export interface HallCalibrationPatch {
@@ -59,11 +81,15 @@ const hallMappings: Record<HallChannel, Action> = {
 }
 const gpioMappings: Record<GpioPin, GpioAssignment> = { gp0: 'S2', gp1: 'A1', gp2: 'MENU_DOWN', gp3: 'MENU_SELECT', gp4: 'MENU_BACK', gp5: 'FN' }
 const defaultHallSetting = (channel: number): HallSetting => ({ idle: 2350, active: channel === 13 ? 2700 : 2450, pressed: 3100, threshold: 2800, noise: 30, polarity: 'N', press: 0.3, release: 0.8, rapidTrigger: true, calibrated: true })
+const keyboardActions: KeyboardAction[] = ['Up', 'Down', 'Left', 'Right', 'B1', 'B2', 'B3', 'B4', 'L1', 'R1', 'L2', 'R2', 'S1', 'S2', 'L3', 'R3', 'A1', 'A2', 'A3', 'A4', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12']
+const defaultKeyboardMappings = Object.fromEntries(keyboardActions.map((action, index) => [action, index < 4 ? [82, 81, 80, 79][index] : 4 + index])) as KeyboardMappings
 
 export const defaultConfig: DeviceConfig = {
   hallMappings,
   gpioMappings,
   hall: Object.fromEntries(hallChannels.map((id, index) => [id, defaultHallSetting(index)])) as Record<HallChannel, HallSetting>,
+  inputMode: { inputMode: 0, inputDeviceType: 0, ps4AuthType: 0, ps5AuthType: 0, xinputAuthType: 0, ps4ControllerIDMode: 0, switchTpShareForDs4: false, usbDescOverride: false, usbDescProduct: '', usbDescManufacturer: '', usbDescVersion: '', usbOverrideID: false, usbVendorID: '0000', usbProductID: '0000' },
+  keyboardMappings: defaultKeyboardMappings,
 }
 
 const cloneConfig = (config: DeviceConfig): DeviceConfig => structuredClone(config)
@@ -84,6 +110,7 @@ const actionFromGpioValue = (value: number): GpioAssignment => {
 const rawToMillimeters = (value: number, idle: number, pressed: number): number => Math.max(0.05, Math.min(1.5, ((value - idle) / Math.max(1, pressed - idle)) * 1.5))
 const millimetersToRaw = (value: number, idle: number, pressed: number): number => Math.round(idle + (Math.max(0, Math.min(1.5, value)) / 1.5) * (pressed - idle))
 const calibrationWait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
+const jsonBoolean = (value: unknown): boolean => value === true || value === 1 || value === '1'
 
 export class MockTransport implements DeviceTransport {
   private config = cloneConfig(defaultConfig)
@@ -160,9 +187,11 @@ export class HttpTransport implements DeviceTransport {
   supportsLiveHallCalibration(): boolean { return true }
 
   async readConfig(): Promise<DeviceConfig> {
-    const [pinMappings, calibrations] = await Promise.all([
+    const [pinMappings, calibrations, gamepadOptions, keyboardMappings] = await Promise.all([
       this.request<Record<string, { action: number, customButtonMask: number, customDpadMask: number }>>('/api/getPinMappings'),
       this.request<{ triggers: Array<{ action: number, idle: number, active: number, pressed: number, is_polarized: number, release: number, noise: number, rapidTrigger: number }> }>('/api/getHETriggerCalibrations'),
+      this.request<Record<string, unknown>>('/api/getGamepadOptions'),
+      this.request<Record<string, number>>('/api/getKeyMappings'),
     ])
     const next = cloneConfig(defaultConfig)
     for (let pin = 0; pin <= 5; pin++) {
@@ -187,6 +216,25 @@ export class HttpTransport implements DeviceTransport {
         calibrated: trigger.idle !== trigger.pressed,
       }
     }
+    next.inputMode = {
+      inputMode: Number(gamepadOptions.inputMode ?? next.inputMode.inputMode),
+      inputDeviceType: Number(gamepadOptions.inputDeviceType ?? next.inputMode.inputDeviceType),
+      ps4AuthType: Number(gamepadOptions.ps4AuthType ?? next.inputMode.ps4AuthType),
+      ps5AuthType: Number(gamepadOptions.ps5AuthType ?? next.inputMode.ps5AuthType),
+      xinputAuthType: Number(gamepadOptions.xinputAuthType ?? next.inputMode.xinputAuthType),
+      ps4ControllerIDMode: Number(gamepadOptions.ps4ControllerIDMode ?? next.inputMode.ps4ControllerIDMode),
+      switchTpShareForDs4: jsonBoolean(gamepadOptions.switchTpShareForDs4),
+      usbDescOverride: jsonBoolean(gamepadOptions.usbDescOverride),
+      usbDescProduct: String(gamepadOptions.usbDescProduct ?? ''),
+      usbDescManufacturer: String(gamepadOptions.usbDescManufacturer ?? ''),
+      usbDescVersion: String(gamepadOptions.usbDescVersion ?? ''),
+      usbOverrideID: jsonBoolean(gamepadOptions.usbOverrideID),
+      usbVendorID: String(gamepadOptions.usbVendorID ?? '0000'),
+      usbProductID: String(gamepadOptions.usbProductID ?? '0000'),
+    }
+    Object.keys(next.keyboardMappings).forEach((key) => {
+      if (typeof keyboardMappings[key] === 'number') next.keyboardMappings[key as KeyboardAction] = keyboardMappings[key]
+    })
     return next
   }
 
@@ -258,6 +306,32 @@ export class HttpTransport implements DeviceTransport {
       }
     }
     await this.request('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
+
+    await this.request('/api/setKeyMappings', {
+      method: 'POST',
+      body: JSON.stringify(config.keyboardMappings),
+    })
+
+    const gamepadOptions = await this.request<Record<string, unknown>>('/api/getGamepadOptions')
+    const inputMode = config.inputMode
+    const gamepadPatch = {
+      ...gamepadOptions,
+      inputMode: inputMode.inputMode,
+      inputDeviceType: inputMode.inputDeviceType,
+      ps4AuthType: inputMode.ps4AuthType,
+      ps5AuthType: inputMode.ps5AuthType,
+      xinputAuthType: inputMode.xinputAuthType,
+      ps4ControllerIDMode: inputMode.ps4ControllerIDMode,
+      switchTpShareForDs4: inputMode.switchTpShareForDs4 ? 1 : 0,
+      usbDescOverride: inputMode.usbDescOverride ? 1 : 0,
+      usbDescProduct: inputMode.usbDescProduct,
+      usbDescManufacturer: inputMode.usbDescManufacturer,
+      usbDescVersion: inputMode.usbDescVersion,
+      usbOverrideID: inputMode.usbOverrideID ? 1 : 0,
+      usbVendorID: inputMode.usbVendorID,
+      usbProductID: inputMode.usbProductID,
+    }
+    await this.request('/api/setGamepadOptions', { method: 'POST', body: JSON.stringify(gamepadPatch) })
   }
   async saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void> {
     const calibrationResponse = await this.request<{ triggers: Array<Record<string, number>> }>('/api/getHETriggerCalibrations')
