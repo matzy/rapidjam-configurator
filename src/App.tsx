@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { AlertTriangle, Check, ChevronRight, CircleHelp, Keyboard, Link2, RotateCcw, Save, Usb, Zap } from 'lucide-react'
+import { useState, type MouseEvent } from 'react'
+import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, Usb, Zap } from 'lucide-react'
 import { Action, DeviceConfig, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from './device'
 import { HALL_LABELS } from './config/constants'
 import { rawToMillimeters, secondHighest, secondLowest } from './utils/calibrationMath'
@@ -12,21 +12,44 @@ import { CalibrationPanel as CalibrationPanelComponent, CalibrationWorkspace as 
 import { createTransport } from './transport/createTransport'
 import { useDeviceConfig } from './hooks/useDeviceConfig'
 import { useHallCalibration } from './hooks/useHallCalibration'
-import { InputModePanel } from './components/InputModePanel'
 
 const transport: DeviceTransport = createTransport()
 const hallLabels = HALL_LABELS
 const rawToMm = rawToMillimeters
+const hallChannels = Array.from({ length: 16 }, (_, index) => `ch${index}` as HallChannel)
 
 export function App() {
   const deviceConfig = useDeviceConfig(transport)
-  const { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateMapping, updateHall, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration } = deviceConfig
+  const { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateMapping, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration } = deviceConfig
   const [activeButton, setActiveButton] = useState<HallChannel>('ch14')
-  const [section, setSection] = useState<'mapping' | 'hall' | 'inputMode'>('mapping')
+  const [selectedHallButtons, setSelectedHallButtons] = useState<HallChannel[]>(['ch14'])
+  const [section, setSection] = useState<'mapping' | 'hall'>('mapping')
   const calibration = useHallCalibration(transport, setNotice)
   const { calibrationStage, calibrationResults, calibrationProgress } = { calibrationStage: calibration.stage, calibrationResults: calibration.results, calibrationProgress: calibration.progress }
 
   const activeHall = config.hall[activeButton]
+
+  function selectHallButton(id: HallChannel, event?: MouseEvent<HTMLButtonElement>) {
+    if (!event?.shiftKey && !event?.ctrlKey && !event?.metaKey) {
+      setSelectedHallButtons([id])
+      setActiveButton(id)
+      return
+    }
+    setSelectedHallButtons((current) => {
+      if (current.includes(id)) {
+        if (current.length === 1) return current
+        const remaining = current.filter((button) => button !== id)
+        if (activeButton === id) setActiveButton(remaining[0])
+        return remaining
+      }
+      return [...current, id]
+    })
+    setActiveButton(id)
+  }
+
+  function selectAllHallButtons() {
+    setSelectedHallButtons(hallChannels)
+  }
 
   function startCalibration() { void calibration.startCalibration() }
 
@@ -98,13 +121,12 @@ export function App() {
         <div className="sidebar-heading">CONFIGURATION</div>
         <button className={`nav-item ${section === 'mapping' ? 'selected' : ''}`} onClick={() => setSection('mapping')}><Link2 size={17} /> Button mapping <ChevronRight size={15} /></button>
         <button className={`nav-item ${section === 'hall' ? 'selected' : ''}`} onClick={() => setSection('hall')}><Zap size={17} /> Magnetic switches <ChevronRight size={15} /></button>
-        <button className={`nav-item ${section === 'inputMode' ? 'selected' : ''}`} onClick={() => setSection('inputMode')}><Keyboard size={17} /> Input mode <ChevronRight size={15} /></button>
         <div className="sidebar-foot"><div className="connection-card"><Usb size={17} /><div><strong>{device ? 'USB connected' : 'Looking for device'}</strong><span>{device ? (device.transport === 'http' ? 'WebConfig HTTP via local proxy' : 'Mock transport') : 'Connect RapidJAM by USB'}</span></div></div><button className="text-button" onClick={() => void connect()} disabled={busy || restartComplete}>{busy ? 'Connecting...' : 'Reconnect device'}</button><button className="text-button" onClick={() => void restartToGamepad()} disabled={busy || connectionFailed || restartComplete}>Restart in gamepad mode</button>{diagnostic && <details className="diagnostic"><summary>Connection diagnostic</summary><code>{diagnostic}</code></details>}</div>
       </aside>
 
       <section className="content">
-        <div className="content-heading"><div><p className="eyebrow">{section === 'mapping' ? 'INPUT LAYOUT' : section === 'hall' ? 'MAGNETIC INPUT' : 'PROTOCOL & KEYS'}</p><h1>{section === 'mapping' ? 'Button mapping' : section === 'hall' ? 'Magnetic switches' : 'Input mode'}</h1><p className="lede">{section === 'mapping' ? 'Tune every input for the way you play.' : section === 'hall' ? 'Shape the exact moment each button responds.' : 'Choose the protocol and customize keyboard actions.'}</p></div><div className="notice"><span className="notice-dot" />{notice}</div></div>
-        {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} /> : section === 'hall' ? <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} hall={activeHall} onSelect={setActiveButton} onChange={updateHall} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} /> : <InputModePanel config={config} onInputModeChange={updateInputMode} onKeyboardChange={updateKeyboardMapping} />}
+        <div className="content-heading"><div><p className="eyebrow">{section === 'mapping' ? 'INPUT LAYOUT' : 'MAGNETIC INPUT'}</p><h1>{section === 'mapping' ? 'Button mapping' : 'Magnetic switches'}</h1><p className="lede">{section === 'mapping' ? 'Tune every input for the way you play.' : 'Shape the exact moment each button responds.'}</p></div><div className="notice"><span className="notice-dot" />{notice}</div></div>
+        {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} onInputModeChange={updateInputMode} onKeyboardMappingChange={updateKeyboardMapping} /> : <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} selectedButtons={selectedHallButtons} hall={activeHall} onSelect={selectHallButton} onSelectAll={selectAllHallButtons} onChange={updateHallMany} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} />}
       </section>
     </main>
 

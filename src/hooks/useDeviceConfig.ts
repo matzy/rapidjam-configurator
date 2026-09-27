@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting, InputModeConfig, KeyboardAction } from '../device'
+import type { DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting, InputModeConfig } from '../device'
 import { defaultConfig } from '../device'
 
 export function useDeviceConfig(transport: DeviceTransport) {
@@ -65,6 +65,13 @@ export function useDeviceConfig(transport: DeviceTransport) {
     void updateConfig({ ...config, hall: { ...config.hall, [button]: { ...config.hall[button], ...patch } } })
   }
 
+  function updateHallMany(buttons: ReadonlyArray<HallChannel>, patch: Partial<HallSetting>) {
+    if (!buttons.length) return
+    const hall = { ...config.hall }
+    buttons.forEach((button) => { hall[button] = { ...hall[button], ...patch } })
+    void updateConfig({ ...config, hall })
+  }
+
   function updateGpio(button: GpioPin, action: GpioAssignment) {
     void updateConfig({ ...config, gpioMappings: { ...config.gpioMappings, [button]: action } })
   }
@@ -73,7 +80,7 @@ export function useDeviceConfig(transport: DeviceTransport) {
     void updateConfig({ ...config, inputMode: { ...config.inputMode, ...patch } })
   }
 
-  function updateKeyboardMapping(action: KeyboardAction, key: number) {
+  function updateKeyboardMapping(action: keyof DeviceConfig['keyboardMappings'], key: number) {
     void updateConfig({ ...config, keyboardMappings: { ...config.keyboardMappings, [action]: key } })
   }
 
@@ -108,5 +115,5 @@ export function useDeviceConfig(transport: DeviceTransport) {
     } finally { setBusy(false) }
   }
 
-  return { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateConfig, updateMapping, updateHall, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration }
+  return { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateConfig, updateMapping, updateHall, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration }
 }

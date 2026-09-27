@@ -1,4 +1,4 @@
-export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'NONE'
+export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
 export type HallChannel = `ch${number}`
 export type GpioPin = `gp${0 | 1 | 2 | 3 | 4 | 5}`
@@ -23,6 +23,15 @@ export interface InputModeConfig {
 }
 
 export type KeyboardMappings = Record<KeyboardAction, number>
+
+export function keyboardActionFor(action: Action | GpioAssignment): KeyboardAction | null {
+  if (action === 'NONE' || action.startsWith('TURBO_') || action.startsWith('MACRO_') || ['ACCELERATOR', 'BRAKE', 'HOME', 'MENU_DOWN', 'MENU_SELECT', 'MENU_BACK', 'FN'].includes(action)) return null
+  if (action === 'UP') return 'Up'
+  if (action === 'DOWN') return 'Down'
+  if (action === 'LEFT') return 'Left'
+  if (action === 'RIGHT') return 'Right'
+  return action as KeyboardAction
+}
 
 export interface HallSetting {
   idle: number
@@ -82,7 +91,7 @@ const hallMappings: Record<HallChannel, Action> = {
 const gpioMappings: Record<GpioPin, GpioAssignment> = { gp0: 'S2', gp1: 'A1', gp2: 'MENU_DOWN', gp3: 'MENU_SELECT', gp4: 'MENU_BACK', gp5: 'FN' }
 const defaultHallSetting = (channel: number): HallSetting => ({ idle: 2350, active: channel === 13 ? 2700 : 2450, pressed: 3100, threshold: 2800, noise: 30, polarity: 'N', press: 0.3, release: 0.8, rapidTrigger: true, calibrated: true })
 const keyboardActions: KeyboardAction[] = ['Up', 'Down', 'Left', 'Right', 'B1', 'B2', 'B3', 'B4', 'L1', 'R1', 'L2', 'R2', 'S1', 'S2', 'L3', 'R3', 'A1', 'A2', 'A3', 'A4', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12']
-const defaultKeyboardMappings = Object.fromEntries(keyboardActions.map((action, index) => [action, index < 4 ? [82, 81, 80, 79][index] : 4 + index])) as KeyboardMappings
+const defaultKeyboardMappings = Object.fromEntries(keyboardActions.map((action) => [action, ({ Up: 26, Down: 22, Left: 4, Right: 7, B1: 11, B2: 13, B3: 28, B4: 24, L1: 18, R1: 15, L2: 12, R2: 14, S1: 42, S2: 40 } as Record<string, number>)[action] ?? 0])) as KeyboardMappings
 
 export const defaultConfig: DeviceConfig = {
   hallMappings,
@@ -94,9 +103,10 @@ export const defaultConfig: DeviceConfig = {
 
 const cloneConfig = (config: DeviceConfig): DeviceConfig => structuredClone(config)
 
-const gpioActionValues: Record<string, number> = {
+export const gpioActionValues: Record<string, number> = {
   NONE: -10, UP: 1, DOWN: 2, LEFT: 3, RIGHT: 4, B1: 5, B2: 6, B3: 7, B4: 8,
   L1: 9, R1: 10, L2: 11, R2: 12, S1: 13, S2: 14, A1: 15, A2: 16, L3: 17, R3: 18, FN: 19,
+  A3: 41, A4: 42, E1: 43, E2: 44, E3: 45, E4: 46, E5: 47, E6: 48, E7: 49, E8: 50, E9: 51, E10: 52, E11: 53, E12: 54,
   MENU_DOWN: 73, MENU_SELECT: 76, MENU_BACK: 77,
   TURBO_B1: 32, MACRO_1: 34, MACRO_2: 35, MACRO_3: 36, MACRO_4: 37,
 }

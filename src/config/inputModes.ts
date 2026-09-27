@@ -39,3 +39,23 @@ export const AUTH_OPTIONS = [
 ]
 
 export const keyboardLabels = ['Up', 'Down', 'Left', 'Right', 'B1', 'B2', 'B3', 'B4', 'L1', 'R1', 'L2', 'R2', 'S1', 'S2', 'L3', 'R3', 'A1', 'A2', 'A3', 'A4', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12'] as const
+
+export const KEY_CODES = [
+  { label: 'None', value: 0x00 },
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((label, index) => ({ label, value: 0x04 + index })),
+  ...['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((label, index) => ({ label, value: 0x1e + index })),
+  { label: 'Enter', value: 0x28 }, { label: 'Escape', value: 0x29 }, { label: 'Backspace', value: 0x2a }, { label: 'Tab', value: 0x2b }, { label: 'Space', value: 0x2c },
+  { label: 'Minus', value: 0x2d }, { label: 'Equal', value: 0x2e }, { label: 'Bracket Left', value: 0x2f }, { label: 'Bracket Right', value: 0x30 }, { label: 'Backslash', value: 0x31 }, { label: 'Intl Hash', value: 0x32 }, { label: 'Semicolon', value: 0x33 }, { label: 'Quote', value: 0x34 }, { label: 'Backquote', value: 0x35 }, { label: 'Comma', value: 0x36 }, { label: 'Period', value: 0x37 }, { label: 'Slash', value: 0x38 }, { label: 'CapsLock', value: 0x39 },
+  ...Array.from({ length: 12 }, (_, index) => ({ label: `F${index + 1}`, value: 0x3a + index })),
+  { label: 'Print Screen', value: 0x46 }, { label: 'Scroll Lock', value: 0x47 }, { label: 'Pause', value: 0x48 }, { label: 'Insert', value: 0x49 }, { label: 'Home', value: 0x4a }, { label: 'Page Up', value: 0x4b }, { label: 'Delete', value: 0x4c }, { label: 'End', value: 0x4d }, { label: 'Page Down', value: 0x4e },
+  { label: 'Arrow Right', value: 0x4f }, { label: 'Arrow Left', value: 0x50 }, { label: 'Arrow Down', value: 0x51 }, { label: 'Arrow Up', value: 0x52 }, { label: 'NumLock', value: 0x53 }, { label: 'Numpad Slash', value: 0x54 }, { label: 'Numpad Asterisk', value: 0x55 }, { label: 'Numpad Minus', value: 0x56 }, { label: 'Numpad Plus', value: 0x57 }, { label: 'Numpad Enter', value: 0x58 },
+  ...['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((label, index) => ({ label: `Numpad ${label}`, value: 0x59 + index })),
+  { label: 'Numpad Period', value: 0x63 }, { label: 'Intl Backslash', value: 0x64 }, { label: 'Numpad Equals', value: 0x67 },
+  ...Array.from({ length: 12 }, (_, index) => ({ label: `F${index + 13}`, value: 0x68 + index })),
+  { label: 'Control Left', value: 0xe0 }, { label: 'Shift Left', value: 0xe1 }, { label: 'Alt Left', value: 0xe2 }, { label: 'Meta Left', value: 0xe3 }, { label: 'Control Right', value: 0xe4 }, { label: 'Shift Right', value: 0xe5 }, { label: 'Alt Right', value: 0xe6 }, { label: 'Meta Right', value: 0xe7 },
+  { label: 'Next Track', value: 0xe8 }, { label: 'Prev Track', value: 0xe9 }, { label: 'Stop', value: 0xf0 }, { label: 'Play/Pause', value: 0xf1 }, { label: 'Mute', value: 0xf2 }, { label: 'Volume Up', value: 0xf3 }, { label: 'Volume Down', value: 0xf4 },
+]
+
+export function keyboardKeyLabel(value: number): string {
+  return KEY_CODES.find((key) => key.value === value)?.label ?? `Unknown (0x${value.toString(16).padStart(2, '0').toUpperCase()})`
+}
