@@ -1,8 +1,5 @@
 [CmdletBinding()]
 param(
-  [string]$NodeVersion = 'v24.19.0',
-  [ValidateSet('x64', 'arm64')]
-  [string]$Architecture = 'x64',
   [string]$OutputDirectory = 'release',
   [switch]$Force
 )
@@ -13,12 +10,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $releaseRoot = Join-Path $projectRoot $OutputDirectory
 $stagingDirectory = Join-Path $releaseRoot 'rapidjam-configurator'
-$runtimeDirectory = Join-Path $stagingDirectory 'runtime'
-$archivePath = Join-Path $releaseRoot "rapidjam-configurator-$NodeVersion-win-$Architecture.zip"
-$nodeArchiveName = "node-$NodeVersion-win-$Architecture.zip"
-$nodeDownloadUrl = "https://nodejs.org/dist/$NodeVersion/$nodeArchiveName"
-$temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "rapidjam-node-$([guid]::NewGuid().ToString('N'))"
-$nodeArchivePath = Join-Path $temporaryDirectory $nodeArchiveName
+$archivePath = Join-Path $releaseRoot 'rapidjam-configurator.zip'
 
 function Remove-PathIfPresent([string]$Path) {
   if (Test-Path -LiteralPath $Path) {
@@ -55,28 +47,17 @@ try {
   if (-not (Test-Path -LiteralPath $releaseRoot)) {
     New-Item -ItemType Directory -Path $releaseRoot | Out-Null
   }
-  New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
-
-  Write-Host "Downloading portable Node.js $NodeVersion ($Architecture)..."
-  New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
-  Invoke-WebRequest -UseBasicParsing -Uri $nodeDownloadUrl -OutFile $nodeArchivePath
-  Expand-Archive -LiteralPath $nodeArchivePath -DestinationPath $temporaryDirectory -Force
-
-  $extractedNodeDirectory = Join-Path $temporaryDirectory "node-$NodeVersion-win-$Architecture"
-  if (-not (Test-Path -LiteralPath (Join-Path $extractedNodeDirectory 'node.exe'))) {
-    throw "The downloaded Node.js archive did not contain node.exe: $nodeDownloadUrl"
-  }
-  Copy-Item -Path (Join-Path $extractedNodeDirectory '*') -Destination $runtimeDirectory -Recurse -Force
-
-  Copy-Item -Path (Join-Path $projectRoot 'dist') -Destination $stagingDirectory -Recurse -Force
+  New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
+  Copy-Item -Path (Join-Path $projectRoot 'dist') -Destination (Join-Path $stagingDirectory 'dist') -Recurse -Force
   Copy-Item -Path (Join-Path $projectRoot 'server.mjs') -Destination $stagingDirectory -Force
   Copy-Item -Path (Join-Path $projectRoot 'start-rapidjam.cmd') -Destination $stagingDirectory -Force
+  Copy-Item -Path (Join-Path $projectRoot 'setup.ps1') -Destination $stagingDirectory -Force
+  Copy-Item -Path (Join-Path $projectRoot 'node-runtime.json') -Destination $stagingDirectory -Force
   Copy-Item -Path (Join-Path $projectRoot 'DISTRIBUTION.md') -Destination $stagingDirectory -Force
 
   Compress-Archive -Path (Join-Path $stagingDirectory '*') -DestinationPath $archivePath -CompressionLevel Optimal -Force
   Write-Host "Created: $archivePath" -ForegroundColor Green
 } finally {
-  Remove-PathIfPresent $temporaryDirectory
   if (Test-Path -LiteralPath $stagingDirectory) {
     Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
   }
