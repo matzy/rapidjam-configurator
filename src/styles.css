@@ -69,3 +69,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .calibration-workspace .controller-key.calibration-error { color: #182119; border-color: #d46b5e; background: #ef9b91; }
 .calibration-workspace .controller-key.calibration-reading { color: #ffffff; border-color: #5ba8f5; background: #2676c5; box-shadow: 0 0 0 3px rgba(38,118,197,.3); }
 .calibration-stage-baseline .controller-key.calibration-waiting { color: #c4cfca; border-color: #4e5e60; background: #202d30; }
+
+/* Keep navigation and device actions visible while the main workspace scrolls. */
+.sidebar { position: sticky; top: 12px; align-self: start; max-height: calc(100dvh - var(--actionbar-height) - 84px); overflow-y: auto; }
+.sidebar-foot { margin-top: 3em; }
