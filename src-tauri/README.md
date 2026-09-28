@@ -1,6 +1,8 @@
 # Tauri desktop build notes
 
 - The bundled frontend uses the existing React/Vite app; no Node.js runtime is required on target PCs.
+- Run `npm run dev:setup -- --base-port <unused-port>` once per worktree. The ignored `.env.local` assigns consecutive Vite/Tauri, legacy, and preview ports and a worktree-specific profile; use `npm run dev:show` to review it.
+- `npm run tauri:dev` generates and merges an ignored local Tauri override so its dev URL, CSP, Rust IPC origin, and WebView2 data directory agree with `.env.local`. Release builds continue using the production settings configured in `tauri.conf.json`.
 - Device networking is performed by the `device_request` Rust command. It only permits an explicit list of WebConfig endpoints on `http://192.168.7.1`.
 - This first portable build uses the system Evergreen WebView2 Runtime. Confirm the runtime is present on every deployment target. Windows 11 normally includes it; some Windows 10 PCs may not.
 - WebView2 profile/cache data uses `%LOCALAPPDATA%\Goppa\rapidjam.configurator\EBWebView`. It is created on first launch and remains after the application ZIP is moved or deleted. Close the app before removing that directory to reset its WebView profile.

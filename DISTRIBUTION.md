@@ -43,8 +43,14 @@ RapidJAM must be connected in WebConfig/RNDIS mode and reachable at `http://192.
 
 ## Developer commands
 
-- `npm run dev` — browser UI with the Vite proxy to the device.
+- `npm run dev:setup -- --base-port 5180` — create ignored per-worktree settings (Vite/Tauri 5180, legacy server 5181, preview 5182, and a worktree-specific WebView2 profile). Choose a base whose three ports are unused. It refuses to overwrite `.env.local` unless `--force` is specified.
+- `npm run dev:show` — display the effective per-worktree URLs and profile.
+- `npm run dev` — browser UI at the configured Vite port with the proxy to the device; strict port binding prevents silently using another port. Without `.env.local`, standalone defaults are 5173/5174/5175.
 - `npm run build` — TypeScript validation and production frontend build.
-- `npm run tauri:dev` — Tauri window with hot-reloaded frontend; Rust toolchain required.
+- `npm run preview` — production frontend preview at the configured preview port; strict port binding is enabled.
+- `npm run tauri:dev` — Tauri window with hot-reloaded frontend at the configured Vite port; Rust toolchain required. An ignored Tauri override is generated from `.env.local`, including a worktree-specific WebView2 data path.
 - `npm run tauri:build -- --no-bundle` — build the Tauri app executable without an installer.
-- `npm run serve` — legacy production web server.
+- `npm run serve:parallel` — legacy production web server at the configured legacy port (override with `PORT` if needed).
+- `npm run serve` — legacy production web server; retains port 5173 for compatibility. Use `serve:parallel` in this checkout when another VS Code instance may already use 5173.
+
+Each worktree's `.env.local` is ignored and is not shared with other worktrees. To change ports, rerun `npm run dev:setup -- --base-port <unused-port> --force`. These development ports are loopback-only and independent of the controller's fixed WebConfig address (`192.168.7.1`). The physical controller itself is still a shared resource: coordinate real-device writes/calibration with other work and use Mock transport while it is in use elsewhere. Build outputs (`dist/`, `src-tauri/target/`, and `release/`) are isolated only when each VS Code instance uses a separate checkout/worktree; do not run concurrent builds in the same checkout or overwrite a shared release archive.

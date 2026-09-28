@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "identifier": "com.rapidjam.configurator",
   "build": {
-    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --strictPort",
+    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 5173 --strictPort",
     "devUrl": "http://127.0.0.1:5173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"

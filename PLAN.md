@@ -78,7 +78,7 @@
 
 1. Start the configurator with `npm run dev`.
 2. Put RapidJAM into WebConfig/RNDIS mode and confirm `http://192.168.7.1/` opens in the browser.
-3. Open `http://127.0.0.1:5173/?transport=http`.
+3. Open `http://127.0.0.1:5174/?transport=http`.
 4. Confirm the header shows the firmware version and the GPIO/Hall values match WebConfig.
 5. Change one GPIO assignment or one Hall setting, then use `Save to device`.
 6. Reconnect or power-cycle RapidJAM and confirm the value remains after reloading the configurator.
@@ -155,6 +155,35 @@ The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty resp
 - [ ] Verify timeout/oversize responses and read, save/readback, reboot and Hall voltage capture on physical hardware.
 - [ ] Code-sign or agree SmartScreen handling before delivery; record ZIP SHA-256 and maintain an Evergreen/WebView2 support/update checklist.
 
+## Parallel VS Code Development Isolation
+
+Keep each worktree's development processes separate from other VS Code instances. Run `npm run dev:setup -- --base-port <unused-port>` once per worktree; the generated `.env.local` is ignored by Git. The physical RapidJAM at `192.168.7.1` remains a shared resource.
+
+### Implemented
+
+- [x] Add `npm run dev:setup -- --base-port <port>` and `npm run dev:show`; store per-worktree settings in ignored `.env.local` with distinct dev, legacy, and preview ports plus a unique development profile.
+- [x] Resolve Vite/preview and parallel legacy server ports from the per-worktree settings, while preserving strict port binding and the packaged launcher's 5173 default.
+- [x] Generate an ignored Tauri dev override so the dev URL/CSP/profile and Rust debug IPC allowlist use the same selected port; keep production Tauri configuration independent of local settings.
+- [x] Document the setup workflow and shared physical-device caveat in `DISTRIBUTION.md` and `src-tauri/README.md`.
+
+### TODO / verification
+
+- [x] Run `npm run dev:setup -- --base-port 5174` in this worktree, confirm 5174/5175/5176 availability, and ensure `.env.local` and generated Tauri override remain ignored.
+- [ ] Confirm other VS Code instances use distinct `.env.local` assignments; do not stop or repurpose their ports.
+- [x] Test `npm run dev:show`, config validation failures, process-environment overrides, and `--force` regeneration.
+- [x] Run `npm run build` successfully after the port/config changes.
+- [x] Run `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `cargo test --locked --offline --manifest-path src-tauri/Cargo.toml`; formatting passes and all 5 Rust tests pass with the configured port.
+- [x] Confirm the installed stable MSVC toolchain/target, Visual Studio C++ Build Tools, Windows SDK, Node/npm, and `cargo-about 0.9.2`; add `%USERPROFILE%\.cargo\bin` to PATH for this PowerShell session only because that directory is absent from the process PATH.
+- [x] Normalize CRLF when reading `Cargo.lock` in the release metadata check; `npm run release:check` now passes without changing the lockfile.
+- [x] Build the Rust app for `x86_64-pc-windows-msvc` with `cargo build --locked --offline --release`; the executable was generated under `src-tauri/target/`.
+- [x] Run `npm run tauri:build -- --target x86_64-pc-windows-msvc --no-bundle`; the complete Windows x64 Tauri executable builds successfully.
+- [x] Start Vite, preview, and the parallel legacy server individually; verified HTTP 200 and loopback-only listeners on configured ports 5174, 5176, and 5175.
+- [ ] Start Tauri in development mode and verify its effective merged development config, HMR, dev-only WebView2 profile, and IPC origin checks; release build was verified, but no development GUI was launched.
+- [x] Confirm setup rejects an occupied port with `EADDRINUSE` without modifying existing settings; Vite/preview retain strict port behavior.
+- [x] Confirm the generated Tauri dev config matches `.env.local` and tracked release config still points at `%LOCALAPPDATA%\Goppa\rapidjam.configurator`.
+- [ ] Coordinate real-device operations; back up current RapidJAM settings before writes, verify readback and restore the original values. Use Mock transport while the other work is using the controller.
+- [ ] Keep builds in separate checkouts; never run concurrent builds against the same `dist/`, `src-tauri/target/`, or `release/` directory.
+
 ## Phase 2: Dedicated USB Configuration
 
 Only proceed after confirming that RapidJAM firmware can be modified and distributed.
@@ -163,6 +192,16 @@ Only proceed after confirming that RapidJAM firmware can be modified and distrib
 2. Define a versioned framed protocol with command, transaction ID, chunks, payload length, and CRC/error handling.
 3. Implement WebHidTransport behind the existing transport interface.
 4. Validate reconnects, permission denial, interrupted transfers, old firmware, concurrent game input, and PS4/PS5 modes.
+
+## Persistent Save Action Bar
+
+- [x] Keep the Save / Discard action bar fixed to the bottom edge of the viewport while the configuration page scrolls.
+- [x] Reserve bottom space for the fixed bar so the last settings and calibration controls remain reachable and unobscured.
+- [x] Preserve the existing dirty-state label, Save / Discard behavior, busy-state disabling, and connection-error overlay stacking.
+- [x] Exercise MockTransport editing, Discard, and Save; confirm dirty/saved status and button enabled states update correctly.
+- [x] Pass the production frontend build without starting a development server or binding a port.
+- [x] Check Button mapping, Magnetic switches, and calibration screens at top, middle, and bottom in a 960×700 browser viewport; confirm the fixed bar stays in place and the content ends above it.
+- [ ] Verify the fixed bar in the Tauri window at 1440×960 and its minimum 960×700 size, including Windows display scaling.
 
 ## Relevant Files
 

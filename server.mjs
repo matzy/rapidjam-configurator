@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('.', import.meta.url))
 const dist = join(root, 'dist')
 const host = '127.0.0.1'
-const port = Number(process.env.PORT ?? 5173)
+const port = Number(process.env.PORT ?? process.env.RAPIDJAM_SERVE_PORT ?? 5173)
 const deviceHost = '192.168.7.1'
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8',

@@ -55,6 +55,10 @@ fn make_icon(path: &Path) {
 }
 
 fn main() {
+    println!("cargo:rerun-if-changed=../.env.local");
+    println!("cargo:rerun-if-env-changed=RAPIDJAM_DEV_PORT");
+    println!("cargo:rustc-env=RAPIDJAM_DEV_PORT={}", dev_port());
+
     let mut attributes = tauri_build::Attributes::new();
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         let icon_path = Path::new(&env::var_os("OUT_DIR").expect("OUT_DIR is missing"))
@@ -64,4 +68,35 @@ fn main() {
             .windows_attributes(tauri_build::WindowsAttributes::new().window_icon_path(icon_path));
     }
     tauri_build::try_build(attributes).expect("failed to run Tauri build script");
+}
+
+fn dev_port() -> u16 {
+    if let Ok(value) = env::var("RAPIDJAM_DEV_PORT") {
+        return value
+            .parse::<u16>()
+            .ok()
+            .filter(|port| *port != 0)
+            .expect("RAPIDJAM_DEV_PORT must be an integer between 1 and 65535");
+    }
+
+    let config_path =
+        Path::new(&env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is missing"))
+            .join("..")
+            .join(".env.local");
+    let Ok(contents) = fs::read_to_string(config_path) else {
+        return 5173;
+    };
+
+    let Some(value) = contents.lines().find_map(|line| {
+        let (key, value) = line.split_once('=')?;
+        (key.trim() == "RAPIDJAM_DEV_PORT").then(|| value.trim())
+    }) else {
+        return 5173;
+    };
+
+    value
+        .parse::<u16>()
+        .ok()
+        .filter(|port| *port != 0)
+        .expect("RAPIDJAM_DEV_PORT in .env.local must be an integer between 1 and 65535")
 }
