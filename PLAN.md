@@ -55,7 +55,7 @@
 
 1. Start the configurator with `npm run dev`.
 2. Put RapidJAM into WebConfig/RNDIS mode and confirm `http://192.168.7.1/` opens in the browser.
-3. Open `http://127.0.0.1:5173/?transport=http`.
+3. Open `http://127.0.0.1:5174/?transport=http`.
 4. Confirm the header shows the firmware version and the GPIO/Hall values match WebConfig.
 5. Change one GPIO assignment or one Hall setting, then use `Save to device`.
 6. Reconnect or power-cycle RapidJAM and confirm the value remains after reloading the configurator.
@@ -131,6 +131,34 @@ The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty resp
 - [x] Unit-test allowed WebConfig method/path pairs, rejection of unknown paths/methods, and request-body type/size validation.
 - [ ] Verify timeout/oversize responses and read, save/readback, reboot and Hall voltage capture on physical hardware.
 - [ ] Code-sign or agree SmartScreen handling before delivery; record ZIP SHA-256 and maintain an Evergreen/WebView2 support/update checklist.
+
+## Parallel VS Code Development Isolation
+
+Keep this checkout's development processes separate from the other VS Code instance. Port assignments below are loopback-only; the physical RapidJAM at `192.168.7.1` remains a shared resource.
+
+### Implemented
+
+- [x] Set Vite browser development to `127.0.0.1:5174` and preview to `127.0.0.1:4174`, both with strict port binding.
+- [x] Set Tauri development URL, command, and dev CSP to port 5174; restrict Rust's development IPC trust check to exactly `http://127.0.0.1:5174`.
+- [x] Make `npm run tauri:dev` use a separate development WebView2 data directory while retaining the packaged app's production data path.
+- [x] Add `npm run serve:parallel` for the legacy server on port 5175, preserving `npm run serve` and packaged-launcher compatibility on 5173.
+- [x] Document port assignments and the physical-device/worktree sharing boundaries in `DISTRIBUTION.md` and `src-tauri/README.md`.
+
+### TODO / verification
+
+- [ ] Confirm both VS Code instances use separate worktrees/checkouts; do not stop or repurpose a port owned by the other instance.
+- [x] Run `npm run build` successfully after the port/config changes.
+- [x] Run `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `cargo test --locked --offline --manifest-path src-tauri/Cargo.toml`; formatting passes and all 5 Rust tests pass.
+- [x] Confirm the installed stable MSVC toolchain/target, Visual Studio C++ Build Tools, Windows SDK, Node/npm, and `cargo-about 0.9.2`; add `%USERPROFILE%\.cargo\bin` to PATH for this PowerShell session only because that directory is absent from the process PATH.
+- [x] Normalize CRLF when reading `Cargo.lock` in the release metadata check; `npm run release:check` now passes without changing the lockfile.
+- [x] Build the Rust app for `x86_64-pc-windows-msvc` with `cargo build --locked --offline --release`; the executable was generated under `src-tauri/target/`.
+- [x] Run `npm run tauri:build -- --target x86_64-pc-windows-msvc --no-bundle`; the complete Windows x64 Tauri executable builds successfully.
+- [x] Start Vite, preview, and the parallel legacy server individually; verified HTTP 200 and loopback-only listeners on 5174, 4174, and 5175.
+- [ ] Start Tauri in development mode and verify its effective merged development config, HMR, dev-only WebView2 profile, and IPC origin checks; release build was verified, but no development GUI was launched.
+- [ ] Confirm an occupied port causes a clear startup failure rather than fallback.
+- [ ] Confirm the Tauri development config merge preserves `devUrl`/CSP and uses the dev profile directory, while release config still points at `%LOCALAPPDATA%\Goppa\rapidjam.configurator`.
+- [ ] Coordinate real-device operations; back up current RapidJAM settings before writes, verify readback and restore the original values. Use Mock transport while the other work is using the controller.
+- [ ] Keep builds in separate checkouts; never run concurrent builds against the same `dist/`, `src-tauri/target/`, or `release/` directory.
 
 ## Phase 2: Dedicated USB Configuration
 

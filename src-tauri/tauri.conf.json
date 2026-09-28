@@ -3,8 +3,8 @@
   "version": "0.4.1",
   "identifier": "com.rapidjam.configurator",
   "build": {
-    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --strictPort",
-    "devUrl": "http://127.0.0.1:5173",
+    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 5174 --strictPort",
+    "devUrl": "http://127.0.0.1:5174",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -15,7 +15,7 @@
     },
     "security": {
       "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; font-src 'self' data:; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'",
-      "devCsp": "default-src 'self'; connect-src ipc: http://ipc.localhost http://127.0.0.1:5173 ws://127.0.0.1:5173; font-src 'self' data:; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "devCsp": "default-src 'self'; connect-src ipc: http://ipc.localhost http://127.0.0.1:5174 ws://127.0.0.1:5174; font-src 'self' data:; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'"
     },
     "windows": [
       {

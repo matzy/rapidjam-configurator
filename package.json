@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "serve:parallel": "node scripts/serve-parallel.mjs",
     "serve": "node server.mjs",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "tauri build",
     "release:check": "node scripts/check-release-metadata.mjs ."
   },

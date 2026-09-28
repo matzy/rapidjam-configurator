@@ -41,8 +41,12 @@ RapidJAM must be connected in WebConfig/RNDIS mode and reachable at `http://192.
 
 ## Developer commands
 
-- `npm run dev` — browser UI with the Vite proxy to the device.
+- `npm run dev` — browser UI at `http://127.0.0.1:5174` with the Vite proxy to the device; strict port binding prevents silently using another port.
 - `npm run build` — TypeScript validation and production frontend build.
-- `npm run tauri:dev` — Tauri window with hot-reloaded frontend; Rust toolchain required.
+- `npm run preview` — production frontend preview at `http://127.0.0.1:4174`; strict port binding is enabled.
+- `npm run tauri:dev` — Tauri window with hot-reloaded frontend on port 5174; Rust toolchain required. Development WebView2 data uses `%LOCALAPPDATA%\Goppa\rapidjam.configurator-dev\EBWebView`, separate from the packaged app profile.
 - `npm run tauri:build -- --no-bundle` — build the Tauri app executable without an installer.
-- `npm run serve` — legacy production web server.
+- `npm run serve:parallel` — legacy production web server on port 5175 (override with `PORT` if needed).
+- `npm run serve` — legacy production web server; retains port 5173 for compatibility. Use `serve:parallel` in this checkout when another VS Code instance may already use 5173.
+
+These development ports are loopback-only and independent of the controller's fixed WebConfig address (`192.168.7.1`). The physical controller itself is still a shared resource: coordinate real-device writes/calibration with other work and use Mock transport while it is in use elsewhere. Build outputs (`dist/`, `src-tauri/target/`, and `release/`) are isolated only when each VS Code instance uses a separate checkout/worktree; do not run concurrent builds in the same checkout or overwrite a shared release archive.

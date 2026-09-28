@@ -26,9 +26,7 @@ fn is_trusted_window(window: &WebviewWindow) -> bool {
 
     #[cfg(debug_assertions)]
     {
-        url.scheme() == "http"
-            && matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"))
-            && url.port() == Some(5173)
+        is_trusted_dev_origin(url.scheme(), url.host_str(), url.port())
     }
 
     #[cfg(not(debug_assertions))]
@@ -36,6 +34,11 @@ fn is_trusted_window(window: &WebviewWindow) -> bool {
         (url.scheme() == "http" && url.host_str() == Some("tauri.localhost"))
             || (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
     }
+}
+
+#[cfg(debug_assertions)]
+fn is_trusted_dev_origin(scheme: &str, host: Option<&str>, port: Option<u16>) -> bool {
+    scheme == "http" && host == Some("127.0.0.1") && port == Some(5174)
 }
 
 fn allowed_method(path: &str, method: &str) -> Option<Method> {
@@ -171,9 +174,40 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{allowed_method, encode_request_body, MAX_REQUEST_BYTES};
+    use super::{allowed_method, encode_request_body, is_trusted_dev_origin, MAX_REQUEST_BYTES};
     use reqwest::Method;
     use serde_json::json;
+
+    #[test]
+    fn trusts_only_the_configurator_dev_origin() {
+        assert!(is_trusted_dev_origin("http", Some("127.0.0.1"), Some(5174)));
+        assert!(!is_trusted_dev_origin(
+            "http",
+            Some("127.0.0.1"),
+            Some(5173)
+        ));
+        assert!(!is_trusted_dev_origin(
+            "http",
+            Some("127.0.0.1"),
+            Some(5175)
+        ));
+        assert!(!is_trusted_dev_origin(
+            "http",
+            Some("localhost"),
+            Some(5174)
+        ));
+        assert!(!is_trusted_dev_origin(
+            "https",
+            Some("127.0.0.1"),
+            Some(5174)
+        ));
+        assert!(!is_trusted_dev_origin(
+            "http",
+            Some("192.168.1.10"),
+            Some(5174)
+        ));
+        assert!(!is_trusted_dev_origin("http", Some("127.0.0.1"), None));
+    }
 
     #[test]
     fn allows_only_configured_device_api_method_pairs() {

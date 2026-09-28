@@ -7,7 +7,7 @@ const packageJson = readJson('package.json')
 const packageLock = readJson('package-lock.json')
 const tauriConfig = readJson('src-tauri/tauri.conf.json')
 const cargoToml = readFileSync(join(root, 'src-tauri/Cargo.toml'), 'utf8')
-const cargoLock = readFileSync(join(root, 'src-tauri/Cargo.lock'), 'utf8')
+const cargoLock = readFileSync(join(root, 'src-tauri/Cargo.lock'), 'utf8').replace(/\r\n/g, '\n')
 
 const errors = []
 const version = packageJson.version
