@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core'
+
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
 export type HallChannel = `ch${number}`
@@ -65,7 +67,7 @@ export interface HallCalibrationPatch {
 export interface DeviceInfo {
   product: string
   firmware: string
-  transport: 'mock' | 'http'
+  transport: 'mock' | 'http' | 'tauri'
 }
 
 export interface DeviceTransport {
@@ -122,6 +124,25 @@ const millimetersToRaw = (value: number, idle: number, pressed: number): number 
 const calibrationWait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
 const jsonBoolean = (value: unknown): boolean => value === true || value === 1 || value === '1'
 
+interface TauriDeviceApiResponse {
+  status: number
+  body: string
+}
+
+async function requestDeviceApi(path: string, method: string, body?: BodyInit | null): Promise<Response> {
+  const payload = body == null
+    ? undefined
+    : typeof body === 'string'
+      ? JSON.parse(body) as unknown
+      : (() => { throw new Error('Tauri device requests only support JSON text bodies') })()
+  const response = await invoke<TauriDeviceApiResponse>('device_request', {
+    path,
+    method,
+    ...(payload === undefined ? {} : { body: payload }),
+  })
+  return new Response(response.body, { status: response.status })
+}
+
 export class MockTransport implements DeviceTransport {
   private config = cloneConfig(defaultConfig)
   private preview: DeviceConfig | null = null
@@ -156,16 +177,21 @@ export class MockTransport implements DeviceTransport {
 }
 
 export class HttpTransport implements DeviceTransport {
-  constructor(private readonly baseUrl: string) {}
+  constructor(private readonly baseUrl: string, private readonly useTauri = false) {}
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${path}`
-    const method = options?.method ?? 'GET'
+    const method = (options?.method ?? 'GET').toUpperCase()
+    // Reads are safe to retry. Writes may already have reached the controller even when
+    // the response is lost (for example, reboot drops RNDIS), so never replay a POST.
+    const maxAttempts = method === 'GET' ? 3 : 1
     let lastError: Error | null = null
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      console.info(`[RapidJAM HTTP] ${method} ${url} (attempt ${attempt}/3)`)
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.info(`[RapidJAM HTTP] ${method} ${url} (attempt ${attempt}/${maxAttempts})`)
       try {
-        const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } })
+        const response = this.useTauri
+          ? await requestDeviceApi(path, method, options?.body)
+          : await fetch(url, { ...options, method, headers: { 'Content-Type': 'application/json', ...options?.headers } })
         console.info(`[RapidJAM HTTP] ${response.status} ${method} ${url}`)
         if (!response.ok) throw new Error(`Device request failed (${response.status}) at ${url}`)
         const body = await response.text()
@@ -178,7 +204,7 @@ export class HttpTransport implements DeviceTransport {
         }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
-        if (attempt < 3) await calibrationWait(150)
+        if (attempt < maxAttempts) await calibrationWait(150)
       }
     }
     if (lastError?.message.includes('Cannot reach')) throw lastError
@@ -187,7 +213,7 @@ export class HttpTransport implements DeviceTransport {
 
   async connect(): Promise<DeviceInfo> {
     const version = await this.request<{ version?: string }>('/api/getFirmwareVersion')
-    return { product: 'RapidJAM', firmware: version.version ?? 'GP2040-CE', transport: 'http' }
+    return { product: 'RapidJAM', firmware: version.version ?? 'GP2040-CE', transport: this.useTauri ? 'tauri' : 'http' }
   }
 
   async restartToGamepad(): Promise<void> {

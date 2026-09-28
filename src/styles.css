@@ -1,6 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
-
-:root { font-family: 'Manrope', sans-serif; color: #e6ece9; background: #12181b; font-synthesis: none; --bg: #12181b; --panel: #1a2326; --panel-hi: #202c2f; --line: #334044; --muted: #8b9a9b; --green: #b7f24b; --green-dim: #607d32; --orange: #ee9b4d; }
+:root { font-family: 'Segoe UI', sans-serif; color: #e6ece9; background: #12181b; font-synthesis: none; --bg: #12181b; --panel: #1a2326; --panel-hi: #202c2f; --line: #334044; --muted: #8b9a9b; --green: #b7f24b; --green-dim: #607d32; --orange: #ee9b4d; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 960px; min-height: 100vh; background: radial-gradient(circle at 70% 0%, #203238 0, transparent 38%), var(--bg); }
 button, select, input { font: inherit; }

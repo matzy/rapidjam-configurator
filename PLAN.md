@@ -81,10 +81,10 @@ The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty resp
 
 ## Known Limitations
 
-- The current UI uses MockTransport. It does not yet write to a physical controller.
-- HttpTransport is only a skeleton until the GP2040-CE JSON payloads are wired to the UI model.
-- Hall mm values are currently UI values; conversion to actual ADC thresholds must be handled by the device adapter using calibrated values.
-- GPIO Turbo, Macro, Accelerator, and Brake choices are currently UI model values. Their exact GP2040-CE enum/payload mappings must be confirmed before hardware writes.
+- The browser UI defaults to MockTransport; use `?transport=http` with the legacy local server for real hardware. The Tauri app selects the native HTTP bridge automatically.
+- `HttpTransport` has GP2040-CE JSON mappings for the configurator's supported fields; its multiple POST save operations are not transactional and require release-grade recovery/real-device tests.
+- Hall position values are converted to ADC thresholds using per-channel idle/pressed calibration data.
+- Some GPIO choices without a supported GP2040-CE action mapping are rejected instead of silently written.
 - GPIO physical positions remain approximate and are not currently rendered as separate physical buttons.
 - WebHID and a custom firmware protocol are Phase 2 and are not required for the HTTP/WebConfig integration.
 
@@ -105,6 +105,33 @@ The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty resp
 - [x] Build and manually verify the RT-enabled and RT-disabled control sets.
 - [ ] Verify Noise Filter readback and save persistence on physical RapidJAM hardware.
 
+## Tauri Desktop Migration (Windows x64)
+
+### Implemented groundwork
+
+- [x] Add Tauri v2 API/CLI dependencies and Tauri development/build scripts.
+- [x] Keep the existing browser `HttpTransport`/Vite proxy and select a native Tauri request path only inside the desktop webview.
+- [x] Add a Rust HTTP bridge restricted to explicit WebConfig endpoints, the `192.168.7.1` device host, GET/POST pairs, JSON object bodies, response/request size limits, timeouts, no redirects, and the main configurator window.
+- [x] Embed the Vite production assets in the Tauri app and store WebView data under `%LOCALAPPDATA%\Goppa\rapidjam.configurator\EBWebView`.
+- [x] Remove the remote Google Fonts import so the bundled UI does not need an internet connection for styling.
+- [x] Add a Windows x64 no-installer ZIP build script and document the current Evergreen WebView2 dependency.
+
+### TODO / acceptance gate
+
+- [x] Install/verify the Rust stable MSVC toolchain and Windows C++ Build Tools on the build machine; generate `src-tauri/Cargo.lock`.
+- [x] Run `npm run build`, `cargo test --locked`, and the Windows x64 release ZIP build; Rust unit tests pass (4/4, including request-body type/size validation).
+- [x] Inspect the rebuilt ZIP and confirm it contains the EXE and `WebView2Loader.dll`; app starts with Evergreen WebView2 and stores the profile under `%LOCALAPPDATA%\Goppa\rapidjam.configurator\EBWebView`.
+- [x] Run `npm ci`, `npm run build`, and the release metadata check after exact-pinning dependencies.
+- [ ] Run `npm run tauri:dev` interactively.
+- [ ] Confirm WebView2 Evergreen presence/version and update policy with the recipient before delivery. Windows 11 normally includes it; some managed/older Windows 10 systems may not.
+- [ ] Decide whether to build a separate Fixed Version WebView2 package for any target lacking Evergreen. The current ZIP does not contain it; do not claim support until runtime path, ACLs, writable local extraction and offline launch are verified on Windows 10/11.
+- [ ] Test on clean Windows 10 and 11 x64 machines with WebView2 installed, including an offline launch. Current smoke test was on the development PC with Evergreen WebView2 153.0.4234.48.
+- [x] Smoke-test WebView2 profile creation under `%LOCALAPPDATA%` and verify the process uses the configured Goppa path.
+- [ ] Test non-admin offline start from local paths containing spaces/Japanese characters and behavior with read-only application folders.
+- [x] Unit-test allowed WebConfig method/path pairs, rejection of unknown paths/methods, and request-body type/size validation.
+- [ ] Verify timeout/oversize responses and read, save/readback, reboot and Hall voltage capture on physical hardware.
+- [ ] Code-sign or agree SmartScreen handling before delivery; record ZIP SHA-256 and maintain an Evergreen/WebView2 support/update checklist.
+
 ## Phase 2: Dedicated USB Configuration
 
 Only proceed after confirming that RapidJAM firmware can be modified and distributed.
@@ -117,8 +144,14 @@ Only proceed after confirming that RapidJAM firmware can be modified and distrib
 ## Relevant Files
 
 - `src/App.tsx`: UI, screens, Save/Discard flow, GPIO and Hall controls.
-- `src/device.ts`: configuration types, defaults, MockTransport, HttpTransport skeleton.
+- `src/device.ts`: configuration types, defaults, MockTransport, mapped HttpTransport, and Tauri IPC request adapter.
 - `src/styles.css`: layout, physical button coordinates, circular button styling.
+- `src-tauri/tauri.conf.json`: embedded frontend, window security/CSP, and portable data directory.
+- `src-tauri/src/lib.rs`: Rust WebConfig HTTP bridge and API allowlist.
+- `src-tauri/about.toml` / `src-tauri/about.hbs`: Windows x64 third-party Rust license audit policy/template; generated notices require human review.
+- `src-tauri/Cargo.toml` / `src-tauri/Cargo.lock`: locked native dependencies.
+- `build-tauri-distribution.ps1`: Windows x64 executable ZIP and SHA-256 generation.
+- `DISTRIBUTION.md`: Tauri and legacy browser distribution requirements.
 - `../docs/button_layout.txt`: RapidJAM channel and GPIO assignment reference.
 - `../docs/RapidJAM_addons_settings.txt`: RapidJAM Hall/MUX settings reference.
 - `../GP2040-CE/src/webconfig.cpp`: firmware HTTP endpoint implementation.

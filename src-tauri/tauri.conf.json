@@ -1,0 +1,42 @@
+{
+  "productName": "RapidJAM Configurator",
+  "version": "0.4.1",
+  "identifier": "com.rapidjam.configurator",
+  "build": {
+    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --strictPort",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "appDirectoriesOverride": {
+      "localData": "$LOCALDATA/Goppa/rapidjam.configurator"
+    },
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; font-src 'self' data:; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "devCsp": "default-src 'self'; connect-src ipc: http://ipc.localhost http://127.0.0.1:5173 ws://127.0.0.1:5173; font-src 'self' data:; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "RapidJAM Configurator",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 960,
+        "minHeight": 700,
+        "center": true,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": false,
+    "targets": [],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "skip"
+      }
+    }
+  }
+}

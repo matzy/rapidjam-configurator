@@ -1,0 +1,11 @@
+RapidJAM Configurator 0.4.0 — JavaScript production dependency notices
+
+This index covers the direct/transitive npm packages in the production Vite bundle as reported by `npm sbom --sbom-format=spdx --omit=dev`. The corresponding unmodified upstream license texts are in THIRD-PARTY-LICENSES/npm/ in the release ZIP. This notice is generated from the current package-lock.json; check it against the final artifact before each release.
+
+- @tauri-apps/api 2.12.0 — Apache-2.0 OR MIT. See THIRD-PARTY-LICENSES/npm/tauri-api/LICENSE-APACHE-2.0 and LICENSE-MIT. Copyright 2019-2025 The Tauri Programme in the Commons Conservancy.
+- lucide-react 1.47.0 — ISC. See THIRD-PARTY-LICENSES/npm/lucide-react/LICENSE. Copyright 2026 Lucide Icons and Contributors.
+- react 19.3.0 — MIT. See THIRD-PARTY-LICENSES/npm/react/LICENSE. Copyright Meta Platforms, Inc. and affiliates.
+- react-dom 19.3.0 — MIT. See THIRD-PARTY-LICENSES/npm/react-dom/LICENSE. Copyright Meta Platforms, Inc. and affiliates.
+- scheduler 0.28.0 — MIT. See THIRD-PARTY-LICENSES/npm/scheduler/LICENSE. Copyright Meta Platforms, Inc. and affiliates.
+
+The SBOM and this notice do not replace review of third-party terms, artwork/marks, platform terms, or firmware components installed in the controller. RapidJAM Configurator itself is distributed under the MIT License (see LICENSE).

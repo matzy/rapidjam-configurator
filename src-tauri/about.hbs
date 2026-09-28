@@ -1,0 +1,15 @@
+# Third-party Rust dependency notices — RapidJAM Configurator {{version}}
+
+> **Generated audit draft.** Review it against the exact shipped Windows x64 executable. Cargo license metadata may omit supplemental notices; this file covers third-party dependencies only.
+
+{{#each licenses}}
+## {{name}}
+
+Used by:
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}
+{{/each}}
+
+{{{text}}}
+
+{{/each}}
