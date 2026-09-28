@@ -170,6 +170,16 @@ Only proceed after confirming that RapidJAM firmware can be modified and distrib
 3. Implement WebHidTransport behind the existing transport interface.
 4. Validate reconnects, permission denial, interrupted transfers, old firmware, concurrent game input, and PS4/PS5 modes.
 
+## Persistent Save Action Bar
+
+- [x] Keep the Save / Discard action bar fixed to the bottom edge of the viewport while the configuration page scrolls.
+- [x] Reserve bottom space for the fixed bar so the last settings and calibration controls remain reachable and unobscured.
+- [x] Preserve the existing dirty-state label, Save / Discard behavior, busy-state disabling, and connection-error overlay stacking.
+- [x] Exercise MockTransport editing, Discard, and Save; confirm dirty/saved status and button enabled states update correctly.
+- [x] Pass the production frontend build without starting a development server or binding a port.
+- [x] Check Button mapping, Magnetic switches, and calibration screens at top, middle, and bottom in a 960×700 browser viewport; confirm the fixed bar stays in place and the content ends above it.
+- [ ] Verify the fixed bar in the Tauri window at 1440×960 and its minimum 960×700 size, including Windows display scaling.
+
 ## Relevant Files
 
 - `src/App.tsx`: UI, screens, Save/Discard flow, GPIO and Hall controls.
