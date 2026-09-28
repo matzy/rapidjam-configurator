@@ -1,6 +1,6 @@
 # RapidJAM Configurator distribution
 
-The distribution contains the production configurator, but does not bundle Node.js. On first launch, the included setup script reuses an exact matching Node.js `v24.19.0` installation or asks to download and verify the official portable runtime into the extracted folder.
+The distribution contains the production configurator, but does not bundle Node.js in the ZIP. On first launch, the included setup script downloads and verifies the official portable Node.js `v24.19.0` runtime into the extracted folder when it is not already present there.
 
 ## Build the application
 
@@ -34,7 +34,7 @@ rapidjam-configurator/
 
 On the target Windows PC, extract the ZIP and run `start-rapidjam.cmd`. There is no mode menu. The launcher starts the production HTTP configurator only, and never runs `npm install` or a production build on the target PC.
 
-The launcher checks the extracted `runtime/` directory and standard system/user Node.js locations. Only the exact version in `node-runtime.json` is accepted. If it is missing, setup displays the official URL and asks for confirmation before downloading. The archive is checked against its pinned SHA-256 before it is installed.
+The launcher checks only `runtime/node.exe` inside the extracted distribution. System-wide and user-installed Node.js versions are never used, even when available. If the downloaded runtime is missing or has a different version, setup displays the official URL and asks for confirmation before downloading. The archive is checked against its pinned SHA-256 before it is installed.
 
 The downloaded runtime is stored under `runtime/` beside the extracted distribution. A network connection is required only for the first download. PowerShell 5.1 or later and permission to write to the extracted folder are required; administrator privileges are not.
 

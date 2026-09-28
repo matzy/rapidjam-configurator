@@ -29,17 +29,9 @@ function Test-NodeVersion([string]$NodePath) {
   try { return ((& $NodePath --version 2>$null | Select-Object -First 1).Trim() -eq $manifest.version) } catch { return $false }
 }
 
-function Find-CompatibleNode {
-  $candidates = @(
-    (Join-Path $runtimeDirectory 'node.exe'),
-    (Join-Path ${env:ProgramFiles} 'nodejs\node.exe'),
-    (Join-Path ${env:LOCALAPPDATA} 'Programs\nodejs\node.exe')
-  )
-  $command = Get-Command node.exe -ErrorAction SilentlyContinue
-  if ($null -ne $command -and $command.Source) { $candidates += $command.Source }
-  foreach ($candidate in ($candidates | Select-Object -Unique)) {
-    if (Test-NodeVersion $candidate) { return $candidate }
-  }
+function Find-LocalNode {
+  $nodePath = Join-Path $runtimeDirectory 'node.exe'
+  if (Test-NodeVersion $nodePath) { return $nodePath }
   return $null
 }
 
@@ -72,11 +64,11 @@ function Install-NodeRuntime([string]$Architecture) {
 
 try {
   $architecture = Get-NativeArchitecture
-  $nodePath = Find-CompatibleNode
+  $nodePath = Find-LocalNode
   if ($nodePath) {
-    Write-SetupMessage "Using Node.js $($manifest.version): $nodePath"
+    Write-SetupMessage "Using downloaded Node.js $($manifest.version): $nodePath"
   } else {
-    Write-SetupMessage "Node.js $($manifest.version) was not found."
+    Write-SetupMessage "Downloaded Node.js $($manifest.version) was not found."
     Write-SetupMessage "The runtime will be saved under: $runtimeDirectory"
     $answer = Read-Host 'Download and install the verified runtime now? [Y/N]'
     if ($answer -notmatch '^(?i)y(es)?$') { throw 'Node.js setup was cancelled.' }
