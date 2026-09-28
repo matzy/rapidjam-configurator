@@ -1,11 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { resolveDevConfig } from './scripts/dev-config.mjs'
+
+const devConfig = resolveDevConfig()
 
 export default defineConfig({
   plugins: [react()],
   server: {
     host: '127.0.0.1',
-    port: 5174,
+    port: devConfig.devPort,
     strictPort: true,
     watch: {
       ignored: ['**/release/**'],
@@ -20,7 +23,7 @@ export default defineConfig({
   },
   preview: {
     host: '127.0.0.1',
-    port: 4174,
+    port: devConfig.previewPort,
     strictPort: true,
   },
 })

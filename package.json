@@ -4,15 +4,18 @@
   "version": "0.4.1",
   "type": "module",
   "scripts": {
+    "dev:setup": "node scripts/configure-worktree.mjs",
+    "dev:show": "node scripts/show-dev-config.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "serve:parallel": "node scripts/serve-parallel.mjs",
     "serve": "node server.mjs",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "tauri:dev": "node scripts/prepare-tauri-dev.mjs && tauri dev --config src-tauri/tauri.dev.local.conf.json",
     "tauri:build": "tauri build",
-    "release:check": "node scripts/check-release-metadata.mjs ."
+    "release:check": "node scripts/check-release-metadata.mjs .",
+    "test:dev-config": "node --test scripts/dev-config.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",

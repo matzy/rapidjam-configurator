@@ -38,7 +38,10 @@ fn is_trusted_window(window: &WebviewWindow) -> bool {
 
 #[cfg(debug_assertions)]
 fn is_trusted_dev_origin(scheme: &str, host: Option<&str>, port: Option<u16>) -> bool {
-    scheme == "http" && host == Some("127.0.0.1") && port == Some(5174)
+    let trusted_port: u16 = env!("RAPIDJAM_DEV_PORT")
+        .parse()
+        .expect("invalid configured dev port");
+    scheme == "http" && host == Some("127.0.0.1") && port == Some(trusted_port)
 }
 
 fn allowed_method(path: &str, method: &str) -> Option<Method> {
@@ -174,37 +177,46 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{allowed_method, encode_request_body, is_trusted_dev_origin, MAX_REQUEST_BYTES};
+    use super::{allowed_method, encode_request_body, MAX_REQUEST_BYTES};
     use reqwest::Method;
     use serde_json::json;
 
+    #[cfg(debug_assertions)]
+    use super::is_trusted_dev_origin;
+
+    #[cfg(debug_assertions)]
     #[test]
     fn trusts_only_the_configurator_dev_origin() {
-        assert!(is_trusted_dev_origin("http", Some("127.0.0.1"), Some(5174)));
-        assert!(!is_trusted_dev_origin(
+        let configured_port: u16 = env!("RAPIDJAM_DEV_PORT").parse().unwrap();
+        assert!(is_trusted_dev_origin(
             "http",
             Some("127.0.0.1"),
-            Some(5173)
+            Some(configured_port)
         ));
+        let other_port = if configured_port == u16::MAX {
+            configured_port - 1
+        } else {
+            configured_port + 1
+        };
         assert!(!is_trusted_dev_origin(
             "http",
             Some("127.0.0.1"),
-            Some(5175)
+            Some(other_port)
         ));
         assert!(!is_trusted_dev_origin(
             "http",
             Some("localhost"),
-            Some(5174)
+            Some(configured_port)
         ));
         assert!(!is_trusted_dev_origin(
             "https",
             Some("127.0.0.1"),
-            Some(5174)
+            Some(configured_port)
         ));
         assert!(!is_trusted_dev_origin(
             "http",
             Some("192.168.1.10"),
-            Some(5174)
+            Some(configured_port)
         ));
         assert!(!is_trusted_dev_origin("http", Some("127.0.0.1"), None));
     }
