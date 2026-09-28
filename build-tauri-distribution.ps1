@@ -84,6 +84,13 @@ try {
   }
   Copy-Item -LiteralPath $webViewLoader -Destination $stagingDirectory -Force
 
+  $userGuidePath = Join-Path $projectRoot 'docs\USER_GUIDE.ja.md'
+  if (-not (Test-Path -LiteralPath $userGuidePath -PathType Leaf)) {
+    throw "Required Japanese end-user guide is missing: $userGuidePath"
+  }
+  Copy-Item -LiteralPath $userGuidePath -Destination $stagingDirectory -Force
+  $userGuideHash = (Get-FileHash -LiteralPath $userGuidePath -Algorithm SHA256).Hash.ToLowerInvariant()
+
   $npmSbomPath = Join-Path $stagingDirectory 'npm-production-sbom.spdx.json'
   & npm.cmd sbom --sbom-format=spdx --omit=dev | Set-Content -LiteralPath $npmSbomPath -Encoding utf8
   if ($LASTEXITCODE -ne 0) { throw "npm SBOM generation failed with exit code $LASTEXITCODE." }
@@ -153,6 +160,7 @@ try {
     cargoWindowsX64MetadataSha256 = (Get-FileHash -LiteralPath $cargoSbomPath -Algorithm SHA256).Hash.ToLowerInvariant()
     npmThirdPartyNoticeSha256 = $npmNoticeHash
     cargoThirdPartyNoticeDraftSha256 = $cargoNoticeHash
+    japaneseUserGuideSha256 = $userGuideHash
     thirdPartyNoticeStatus = 'automatically generated draft; review it against the shipped executable before each release'
   }
   $manifestPath = Join-Path $stagingDirectory 'release-manifest.json'

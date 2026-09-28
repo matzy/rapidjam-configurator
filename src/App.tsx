@@ -12,6 +12,7 @@ import { CalibrationPanel as CalibrationPanelComponent, CalibrationWorkspace as 
 import { createTransport } from './transport/createTransport'
 import { useDeviceConfig } from './hooks/useDeviceConfig'
 import { useHallCalibration } from './hooks/useHallCalibration'
+import { useLocale } from './useLocale'
 
 const transport: DeviceTransport = createTransport()
 const hallLabels = HALL_LABELS
@@ -19,6 +20,7 @@ const rawToMm = rawToMillimeters
 const hallChannels = Array.from({ length: 16 }, (_, index) => `ch${index}` as HallChannel)
 
 export function App() {
+  const { locale, setLocale, t } = useLocale()
   const deviceConfig = useDeviceConfig(transport)
   const { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateMapping, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration } = deviceConfig
   const [activeButton, setActiveButton] = useState<HallChannel>('ch14')
@@ -79,7 +81,7 @@ export function App() {
       await saveHallCalibration(patches, nextConfig)
       calibration.cancel()
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Calibration save failed')
+      setNotice('Calibration save failed')
     }
   }
 
@@ -107,30 +109,31 @@ export function App() {
     {(connectionFailed || restartComplete) && <div className="connect-error-overlay">
       <div className="connect-error-card">
         {restartComplete ? <Check size={40} /> : <AlertTriangle size={40} />}
-        {restartComplete ? <><h2>RapidJAM is restarting in gamepad mode</h2><p>The configurator connection will close while RapidJAM returns to normal gamepad operation.</p></> : <><h2>Cannot connect to RapidJAM</h2><p>Check the USB connection and press Retry. Other controls are unavailable until the connection is restored.</p>{diagnostic && <code>{diagnostic}</code>}<button className="primary-button" onClick={() => void connect()} disabled={busy}>{busy ? 'Connecting...' : 'Retry'}</button></>}
+        {restartComplete ? <><h2>{t('RapidJAM is restarting in gamepad mode')}</h2><p>{t('The configurator connection will close while RapidJAM returns to normal gamepad operation.')}</p></> : <><h2>{t('Cannot connect to RapidJAM')}</h2><p>{t('Check the USB connection and press Retry. Other controls are unavailable until the connection is restored.')}</p>{diagnostic && <code>{diagnostic}</code>}<button className="primary-button" onClick={() => void connect()} disabled={busy}>{t(busy ? 'Connecting...' : 'Retry')}</button></>}
       </div>
     </div>}
     <header className="topbar">
-      <div className="brand"><div className="brand-mark">RJ</div><div><strong>RapidJAM</strong><span>CONTROL CENTER</span></div></div>
-      <div className="device-status"><span className={`status-dot ${device ? 'online' : ''}`} />{device ? device.product : 'No device connected'}<span className="firmware">{device?.firmware ?? 'Connect a controller to begin'}</span></div>
-      <button className="icon-button" title="Help"><CircleHelp size={18} /></button>
+      <div className="brand"><div className="brand-mark">RJ</div><div><strong>RapidJAM</strong><span>{t('CONTROL CENTER')}</span></div></div>
+      <div className="device-status"><span className={`status-dot ${device ? 'online' : ''}`} />{device ? device.product : t('No device connected')}<span className="firmware">{device?.firmware ?? t('Connect a controller to begin')}</span></div>
+      <label className="language-picker"><span className="visually-hidden">{t('Select language')}</span><select aria-label={t('Select language')} value={locale} onChange={(event) => setLocale(event.target.value as 'en' | 'ja')}><option value="ja">日本語</option><option value="en">English</option></select></label>
+      <button className="icon-button" title={t('Help')} aria-label={t('Help')}><CircleHelp size={18} /></button>
     </header>
 
     <main className="workspace" inert={connectionFailed || restartComplete || undefined}>
       <aside className="sidebar">
-        <div className="sidebar-heading">CONFIGURATION</div>
-        <button className={`nav-item ${section === 'mapping' ? 'selected' : ''}`} onClick={() => setSection('mapping')}><Link2 size={17} /> Button mapping <ChevronRight size={15} /></button>
-        <button className={`nav-item ${section === 'hall' ? 'selected' : ''}`} onClick={() => setSection('hall')}><Zap size={17} /> Magnetic switches <ChevronRight size={15} /></button>
-        <div className="sidebar-foot"><div className="connection-card"><Usb size={17} /><div><strong>{device ? 'RapidJAM connected' : 'Looking for device'}</strong><span>{device ? (device.transport === 'tauri' ? 'WebConfig HTTP via desktop app' : device.transport === 'http' ? 'WebConfig HTTP via local proxy' : 'Mock transport') : 'Connect RapidJAM by USB'}</span></div></div><button className="text-button" onClick={() => void connect()} disabled={busy || restartComplete}>{busy ? 'Connecting...' : 'Reconnect device'}</button><button className="text-button" onClick={() => void restartToGamepad()} disabled={busy || connectionFailed || restartComplete}>Restart in gamepad mode</button>{diagnostic && <details className="diagnostic"><summary>Connection diagnostic</summary><code>{diagnostic}</code></details>}</div>
+        <div className="sidebar-heading">{t('CONFIGURATION')}</div>
+        <button className={`nav-item ${section === 'mapping' ? 'selected' : ''}`} onClick={() => setSection('mapping')}><Link2 size={17} /> {t('Button mapping')} <ChevronRight size={15} /></button>
+        <button className={`nav-item ${section === 'hall' ? 'selected' : ''}`} onClick={() => setSection('hall')}><Zap size={17} /> {t('Magnetic switches')} <ChevronRight size={15} /></button>
+        <div className="sidebar-foot"><div className="connection-card"><Usb size={17} /><div><strong>{device ? t('RapidJAM connected') : t('Looking for device')}</strong><span>{device ? t(device.transport === 'tauri' ? 'WebConfig HTTP via desktop app' : device.transport === 'http' ? 'WebConfig HTTP via local proxy' : 'Mock transport') : t('Connect RapidJAM by USB')}</span></div></div><button className="text-button" onClick={() => void connect()} disabled={busy || restartComplete}>{t(busy ? 'Connecting...' : 'Reconnect device')}</button><button className="text-button" onClick={() => void restartToGamepad()} disabled={busy || connectionFailed || restartComplete}>{t('Restart in gamepad mode')}</button>{diagnostic && <details className="diagnostic"><summary>{t('Connection diagnostic')}</summary><code>{diagnostic}</code></details>}</div>
       </aside>
 
       <section className="content">
-        <div className="content-heading"><div><p className="eyebrow">{section === 'mapping' ? 'INPUT LAYOUT' : 'MAGNETIC INPUT'}</p><h1>{section === 'mapping' ? 'Button mapping' : 'Magnetic switches'}</h1><p className="lede">{section === 'mapping' ? 'Tune every input for the way you play.' : 'Shape the exact moment each button responds.'}</p></div><div className="notice"><span className="notice-dot" />{notice}</div></div>
+        <div className="content-heading"><div><p className="eyebrow">{t(section === 'mapping' ? 'INPUT LAYOUT' : 'MAGNETIC INPUT')}</p><h1>{t(section === 'mapping' ? 'Button mapping' : 'Magnetic switches')}</h1><p className="lede">{t(section === 'mapping' ? 'Tune every input for the way you play.' : 'Shape the exact moment each button responds.')}</p></div><div className="notice"><span className="notice-dot" />{t(notice)}</div></div>
         {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} onInputModeChange={updateInputMode} onKeyboardMappingChange={updateKeyboardMapping} /> : <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} selectedButtons={selectedHallButtons} hall={activeHall} onSelect={selectHallButton} onSelectAll={selectAllHallButtons} onChange={updateHallMany} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} />}
       </section>
     </main>
 
-    <footer className="actionbar" inert={connectionFailed || restartComplete || undefined}><div className="draft-state">{dirty ? <><span className="draft-dot" />Unsaved changes</> : <><Check size={15} />All changes saved</>}<span className="separator" />{device?.transport === 'mock' ? 'Demo device' : 'RapidJAM'}</div><div className="actions"><button className="secondary-button" onClick={() => void discard()} disabled={!dirty || busy}><RotateCcw size={16} />Discard</button><button className="primary-button" onClick={() => void save()} disabled={!dirty || busy}><Save size={16} />{busy ? 'Saving...' : 'Save to device'}</button></div></footer>
+    <footer className="actionbar" inert={connectionFailed || restartComplete || undefined}><div className="draft-state">{dirty ? <><span className="draft-dot" />{t('Unsaved changes')}</> : <><Check size={15} />{t('All changes saved')}</>}<span className="separator" />{t(device?.transport === 'mock' ? 'Demo device' : 'RapidJAM')}</div><div className="actions"><button className="secondary-button" onClick={() => void discard()} disabled={!dirty || busy}><RotateCcw size={16} />{t('Discard')}</button><button className="primary-button" onClick={() => void save()} disabled={!dirty || busy}><Save size={16} />{t(busy ? 'Saving...' : 'Save to device')}</button></div></footer>
   </div>
 }
 

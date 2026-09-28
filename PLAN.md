@@ -41,6 +41,29 @@
 - [x] Centralize complete/skip-to-review detection in `useHallCalibration` and check it after each channel/pass.
 - [x] Remove the transitional dead calibration functions, refs, loops, and setter aliases from App; `useHallCalibration` is now the single calibration owner.
 
+## Japanese UI localization
+
+### Implemented
+
+- [x] Add a lightweight shared localization provider with English fallback and Japanese translations; infer Japanese from the browser/WebView language and persist an explicit language choice.
+- [x] Add an accessible Japanese/English selector and synchronize the document language attribute.
+- [x] Localize the app shell, connection state, input/GPIO mapping controls, magnetic-switch settings, calibration workflow, statuses, result tables, and generic save/retry messages.
+- [x] Keep protocol values, GPIO/ADC/CH identifiers, button codes, device-provided product/firmware strings, and raw technical diagnostics unchanged.
+- [x] Use the requested Japanese terminology: 「磁気スイッチ」「アクチュエーションポイント」「リリースポイント」「ラピッドトリガー」.
+- [x] Draft the Japanese end-user guide at `docs/USER_GUIDE.ja.md`; include it in browser and Tauri distribution archives, and record its SHA-256 in the Tauri release manifest.
+- [x] Verify `npm run build` and `npm run release:check`.
+- [x] Browser smoke test: switch English/Japanese, confirm language/document attribute persists after reload, and inspect mapping and magnetic-switch screens at 960px and 1440px widths.
+- [x] Browser mock calibration smoke test: confirm Japanese prompts and workflow entry; cancel without applying any calibration values.
+
+### Remaining localization acceptance TODO
+
+- [ ] Review the translation dictionary against all visible labels, notices, error/status variants, titles, and assistive labels; verify interpolation and ensure no blank/missing Japanese entries. A focused static audit was done; a complete translation key parity test is still outstanding.
+- [ ] Test language selection and persistence in Tauri/WebView2 on Japanese and English OS settings, including malformed/unavailable local storage.
+- [ ] Review Japanese text layout at supported window sizes and display scaling; keyboard-operate the language selector and inspect accessible names/document language.
+- [ ] On supported RapidJAM hardware, verify connection recovery, normal settings save/readback, each calibration state and CH0–CH15 (including ADC29), partial failures, and gamepad-mode return while Japanese is selected. No physical device test was performed during this implementation.
+- [ ] Review the Japanese guide for actual production firmware and release-specific facts before each release. The guide is based on the current source and has not been verified on a physical device.
+- [ ] Create a new versioned release candidate and verify the guide in the archive and `japaneseUserGuideSha256`; preserve already-generated release artifacts unchanged.
+
 ## Phase 1 HTTP Integration
 
 1. [x] Add selectable `HttpTransport` for a real RapidJAM at `http://192.168.7.1`. Use `?transport=http` in the app URL.

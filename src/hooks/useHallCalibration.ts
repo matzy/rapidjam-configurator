@@ -82,7 +82,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
     setResults((current) => current ? { ...current, [channel]: { ...current[channel], status: 'waiting', sampleCount: 0, pressed: null, error: undefined } } : current)
     setProgress((current) => ({ ...current, phase: 'Ready to re-measure channel', channel: Number(channel.slice(2)), attempt: 0, successful: 0 }))
     setStage('capture')
-    setNotice(`${channel.toUpperCase()} is ready for re-measurement`)
+    setNotice('Ready to re-measure channel')
   }
 
   function isResolved(channel: number) {
@@ -138,7 +138,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
       setStage('capture')
       setProgress({ phase: 'Press phase ready', channel: null, attempt: 0, successful: 0, total: 16 })
       setNotice('Press each Hall button fully, in any order')
-    } catch (error) { setStage('error'); setNotice(error instanceof Error ? error.message : 'Calibration failed') }
+    } catch { setStage('error'); setNotice('Calibration failed') }
   }
 
   useEffect(() => {

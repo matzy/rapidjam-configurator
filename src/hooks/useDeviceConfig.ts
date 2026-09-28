@@ -14,6 +14,11 @@ export function useDeviceConfig(transport: DeviceTransport) {
 
   const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig)
 
+  function recordDiagnostic(error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    setDiagnostic(`${new Date().toLocaleTimeString()}  ${detail}`)
+  }
+
   useEffect(() => { void connect() }, [])
 
   async function connect() {
@@ -28,9 +33,8 @@ export function useDeviceConfig(transport: DeviceTransport) {
       setConnectionFailed(false)
       setRestartComplete(false)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to connect'
-      setNotice(message)
-      setDiagnostic(`${new Date().toLocaleTimeString()}  ${message}`)
+      recordDiagnostic(error)
+      setNotice('Failed to connect to RapidJAM. Check the USB cable and WebConfig/RNDIS mode.')
       setConnectionFailed(true)
     } finally { setBusy(false) }
   }
@@ -43,9 +47,8 @@ export function useDeviceConfig(transport: DeviceTransport) {
       setRestartComplete(true)
       setNotice('RapidJAM is restarting in gamepad mode')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to restart RapidJAM'
-      setNotice(message)
-      setDiagnostic(`${new Date().toLocaleTimeString()}  ${message}`)
+      recordDiagnostic(error)
+      setNotice('Failed to restart RapidJAM.')
     } finally { setBusy(false) }
   }
 
@@ -54,7 +57,10 @@ export function useDeviceConfig(transport: DeviceTransport) {
     try {
       await transport.previewConfig(next)
       setNotice('Preview active on device')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Preview failed') }
+    } catch (error) {
+      recordDiagnostic(error)
+      setNotice('Preview failed')
+    }
   }
 
   function updateMapping(button: HallChannel, action: DeviceConfig['hallMappings'][HallChannel]) {
@@ -92,7 +98,10 @@ export function useDeviceConfig(transport: DeviceTransport) {
       setConfig(confirmed)
       setSavedConfig(structuredClone(confirmed))
       setNotice('Saved to RapidJAM')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Save failed') }
+    } catch (error) {
+      recordDiagnostic(error)
+      setNotice('Failed to save configuration. Your changes are still available to retry.')
+    }
     finally { setBusy(false) }
   }
 
@@ -110,7 +119,8 @@ export function useDeviceConfig(transport: DeviceTransport) {
       setSavedConfig(structuredClone(nextConfig))
       setNotice('Calibration results saved to RapidJAM')
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Calibration save failed')
+      recordDiagnostic(error)
+      setNotice('Calibration save failed')
       throw error
     } finally { setBusy(false) }
   }

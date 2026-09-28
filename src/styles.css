@@ -69,3 +69,15 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .calibration-workspace .controller-key.calibration-error { color: #182119; border-color: #d46b5e; background: #ef9b91; }
 .calibration-workspace .controller-key.calibration-reading { color: #ffffff; border-color: #5ba8f5; background: #2676c5; box-shadow: 0 0 0 3px rgba(38,118,197,.3); }
 .calibration-stage-baseline .controller-key.calibration-waiting { color: #c4cfca; border-color: #4e5e60; background: #202d30; }
+.language-picker { margin-left: auto; }
+.language-picker select { padding: 7px 9px; color: #e4ece7; border: 1px solid var(--line); background: #202b2e; font-size: 11px; }
+.language-picker + .icon-button { margin-left: 0; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.notice { max-width: 360px; line-height: 1.5; }
+.sidebar-heading, .selected-label, .eyebrow, .panel-topline, .draft-state, .advanced-settings summary { overflow-wrap: anywhere; }
+@media (max-width: 1150px) {
+	.content { padding: 30px 24px 46px; }
+	.panel-grid, .hall-layout, .calibration-page-grid { grid-template-columns: minmax(0, 1fr); }
+	.gpio-panel { flex-direction: column; }
+	.gpio-grid { min-width: 0; }
+}

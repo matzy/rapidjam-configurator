@@ -54,6 +54,11 @@ try {
   Copy-Item -Path (Join-Path $projectRoot 'setup.ps1') -Destination $stagingDirectory -Force
   Copy-Item -Path (Join-Path $projectRoot 'node-runtime.json') -Destination $stagingDirectory -Force
   Copy-Item -Path (Join-Path $projectRoot 'DISTRIBUTION.md') -Destination $stagingDirectory -Force
+  $userGuidePath = Join-Path $projectRoot 'docs\USER_GUIDE.ja.md'
+  if (-not (Test-Path -LiteralPath $userGuidePath -PathType Leaf)) {
+    throw "Required Japanese end-user guide is missing: $userGuidePath"
+  }
+  Copy-Item -Path $userGuidePath -Destination $stagingDirectory -Force
 
   Compress-Archive -Path (Join-Path $stagingDirectory '*') -DestinationPath $archivePath -CompressionLevel Optimal -Force
   Write-Host "Created: $archivePath" -ForegroundColor Green
