@@ -87,19 +87,29 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .sidebar-foot { margin-top: 3em; }
 
 /* Live Hall travel is distinct from the two fixed configuration thresholds. */
-.travel-meter .meter-track { position: relative; overflow: visible; }
+.travel-meter .meter-control-track { position: relative; margin-top: 11px; }
+.travel-meter .meter-track { position: relative; overflow: visible; margin-top: 0; }
 .travel-meter .meter-track.unavailable { background: repeating-linear-gradient(135deg, #293537, #293537 6px, #202b2e 6px, #202b2e 12px); }
 .travel-meter .meter-track .meter-fill { position: absolute; inset: 0 auto 0 0; z-index: 1; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #71a72b, var(--green)); transition: width .12s linear; }
 .travel-meter .meter-track.stale .meter-fill { opacity: .58; }
-.meter-marker { position: absolute; z-index: 2; top: -4px; bottom: -4px; width: 2px; pointer-events: none; }
-.meter-marker.actuation { background: #70d5df; box-shadow: 0 0 0 1px rgba(15, 21, 22, .7); }
-.meter-marker.threshold { width: 3px; border-right: 2px dashed #ef7777; transform: translateX(2px); }
+.meter-handle-layer { position: absolute; z-index: 3; inset: -10px 0; pointer-events: none; }
+.meter-marker { position: absolute; top: 50%; width: 28px; height: 38px; padding: 0; border: 0; border-radius: 5px; outline-offset: 2px; background: transparent; pointer-events: auto; touch-action: none; transform: translate(-50%, calc(-50% + var(--marker-offset, 0px))); }
+.meter-marker::before { position: absolute; top: 50%; left: 50%; height: 24px; transform: translate(-50%, -50%); content: ''; }
+.meter-marker.actuation::before { width: 3px; border-radius: 2px; background: #70d5df; box-shadow: 0 0 0 1px rgba(15, 21, 22, .7); }
+.meter-marker.threshold::before { width: 5px; border-right: 2px dashed #ef7777; }
+.meter-marker:hover { background: rgba(220, 235, 231, .12); }
+.meter-marker:focus-visible { outline: 2px solid #fff; background: rgba(220, 235, 231, .15); }
 .meter-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 14px; margin-top: 12px; color: #b8c4be; font-size: 10px; line-height: 1.45; }
 .meter-legend span { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; }
 .meter-legend strong { color: #e6ece9; font: 10px 'DM Mono', monospace; white-space: nowrap; }
 .meter-legend i { display: block; width: 3px; height: 14px; justify-self: center; }
 .meter-legend .actuation-key { background: #70d5df; }
 .meter-legend .threshold-key { border-right: 2px dashed #ef7777; }
+.meter-input-indicator { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; }
+.meter-input-caption { color: #b8c4be; }
+.meter-input-state { padding: 4px 9px; border: 1px solid var(--line); color: var(--muted); background: #202b2e; font: 11px 'DM Mono', monospace; }
+.meter-input-state.on { border-color: var(--green-dim); color: var(--green); background: #202e2d; }
+.meter-input-state.off { border-color: #607d89; color: #b4d8e2; background: #1d2c31; }
 .meter-note { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .meter-note.meter-error { color: #ef9b91; }
 .meter-signal { white-space: nowrap; }

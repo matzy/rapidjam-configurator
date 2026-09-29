@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { millimetersToRaw, rawToMillimeters } from './utils/calibrationMath'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
@@ -120,8 +121,6 @@ const actionFromGpioValue = (value: number): GpioAssignment => {
   return entry[0] as GpioAssignment
 }
 
-const rawToMillimeters = (value: number, idle: number, pressed: number): number => Math.max(0.05, Math.min(1.5, ((value - idle) / Math.max(1, pressed - idle)) * 1.5))
-const millimetersToRaw = (value: number, idle: number, pressed: number): number => Math.round(idle + (Math.max(0, Math.min(1.5, value)) / 1.5) * (pressed - idle))
 const calibrationWait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
 const jsonBoolean = (value: unknown): boolean => value === true || value === 1 || value === '1'
 

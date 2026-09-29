@@ -37,7 +37,7 @@ export function App() {
   const { calibrationStage, calibrationResults, calibrationProgress } = { calibrationStage: calibration.stage, calibrationResults: calibration.results, calibrationProgress: calibration.progress }
 
   const activeHall = config.hall[activeButton]
-  const hallTravel = useHallTravel(transport, activeButton, section === 'hall' && calibrationStage === 'idle' && !busy && !connectionFailed && !restartComplete && device !== null && device.transport !== 'mock', hallLiveReads)
+  const hallTravel = useHallTravel(transport, activeButton, section === 'hall' && calibrationStage === 'idle' && !busy && !connectionFailed && !restartComplete && device !== null && device.transport !== 'mock', hallLiveReads, activeHall)
 
   function selectHallButton(id: HallChannel, event?: MouseEvent<HTMLButtonElement>) {
     if (!event?.shiftKey && !event?.ctrlKey && !event?.metaKey) {
