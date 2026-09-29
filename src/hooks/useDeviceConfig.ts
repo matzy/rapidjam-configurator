@@ -32,10 +32,12 @@ export function useDeviceConfig(transport: DeviceTransport) {
       setNotice('Ready to configure')
       setConnectionFailed(false)
       setRestartComplete(false)
+      return true
     } catch (error) {
       recordDiagnostic(error)
       setNotice('Failed to connect to RapidJAM. Check the USB cable and WebConfig/RNDIS mode.')
       setConnectionFailed(true)
+      return false
     } finally { setBusy(false) }
   }
 

@@ -1,6 +1,6 @@
 {
   "productName": "RapidJAM Configurator",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "identifier": "com.rapidjam.configurator",
   "build": {
     "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 5173 --strictPort",

@@ -1,6 +1,13 @@
 export const rawToMillimeters = (value: number, idle: number, pressed: number): number =>
   Math.max(0.05, Math.min(1.5, Math.abs(value - idle) / Math.max(1, Math.abs(pressed - idle)) * 1.5))
 
+export const rawToTravelMillimeters = (value: number, idle: number, pressed: number, calibrated: boolean): number | null => {
+  if (!calibrated || !Number.isFinite(value) || !Number.isFinite(idle) || !Number.isFinite(pressed)) return null
+  const span = pressed - idle
+  if (Math.abs(span) < 1) return null
+  return Math.max(0, Math.min(1.5, (value - idle) / span * 1.5))
+}
+
 export const millimetersToRaw = (value: number, idle: number, pressed: number): number =>
   Math.round(idle + (Math.max(0, Math.min(1.5, value)) / 1.5) * (pressed - idle))
 

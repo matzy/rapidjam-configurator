@@ -85,3 +85,26 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 /* Keep navigation and device actions visible while the main workspace scrolls. */
 .sidebar { position: sticky; top: 12px; align-self: start; max-height: calc(100dvh - var(--actionbar-height) - 84px); overflow-y: auto; }
 .sidebar-foot { margin-top: 3em; }
+
+/* Live Hall travel is distinct from the two fixed configuration thresholds. */
+.travel-meter .meter-track { position: relative; overflow: visible; }
+.travel-meter .meter-track.unavailable { background: repeating-linear-gradient(135deg, #293537, #293537 6px, #202b2e 6px, #202b2e 12px); }
+.travel-meter .meter-track .meter-fill { position: absolute; inset: 0 auto 0 0; z-index: 1; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #71a72b, var(--green)); transition: width .12s linear; }
+.travel-meter .meter-track.stale .meter-fill { opacity: .58; }
+.meter-marker { position: absolute; z-index: 2; top: -4px; bottom: -4px; width: 2px; pointer-events: none; }
+.meter-marker.actuation { background: #70d5df; box-shadow: 0 0 0 1px rgba(15, 21, 22, .7); }
+.meter-marker.threshold { width: 3px; border-right: 2px dashed #ef7777; transform: translateX(2px); }
+.meter-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 14px; margin-top: 12px; color: #b8c4be; font-size: 10px; line-height: 1.45; }
+.meter-legend span { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; }
+.meter-legend strong { color: #e6ece9; font: 10px 'DM Mono', monospace; white-space: nowrap; }
+.meter-legend i { display: block; width: 3px; height: 14px; justify-self: center; }
+.meter-legend .actuation-key { background: #70d5df; }
+.meter-legend .threshold-key { border-right: 2px dashed #ef7777; }
+.meter-note { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.meter-note.meter-error { color: #ef9b91; }
+.meter-signal { white-space: nowrap; }
+.meter-signal span { background: #627071; box-shadow: none; }
+.meter-signal.ready span { background: var(--green); box-shadow: 0 0 10px rgba(183,242,75,.6); }
+.meter-signal.error { color: #ef9b91; }
+.meter-signal.error span { background: #ef9b91; }
+@media (max-width: 1150px) { .meter-legend { grid-template-columns: 1fr; } }

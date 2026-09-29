@@ -77,6 +77,7 @@ export interface DeviceTransport {
   supportsLiveHallCalibration(): boolean
   prepareHallCalibration(): Promise<void>
   readHallVoltage(channel: number, onAttempt?: (attempt: number) => void): Promise<number>
+  readHallVoltageLive(channel: number): Promise<number>
   previewConfig(config: DeviceConfig): Promise<void>
   commitConfig(config: DeviceConfig): Promise<void>
   saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void>
@@ -157,6 +158,7 @@ export class MockTransport implements DeviceTransport {
   supportsLiveHallCalibration(): boolean { return true }
   async prepareHallCalibration(): Promise<void> {}
   async readHallVoltage(channel: number): Promise<number> { return this.config.hall[`ch${channel}` as HallChannel].idle }
+  async readHallVoltageLive(channel: number): Promise<number> { return this.config.hall[`ch${channel}` as HallChannel].idle }
   async previewConfig(config: DeviceConfig): Promise<void> { this.preview = cloneConfig(config) }
   async commitConfig(config: DeviceConfig): Promise<void> { this.config = cloneConfig(config); this.preview = null }
   async saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void> {
@@ -308,6 +310,33 @@ export class HttpTransport implements DeviceTransport {
       }
     }
     throw new Error(`CH${channel} voltage read failed after 30 attempts: ${lastError?.message ?? 'unknown error'}`)
+  }
+
+  async readHallVoltageLive(channel: number): Promise<number> {
+    const controller = this.useTauri ? undefined : new AbortController()
+    let timedOut = false
+    const timeout = controller ? setTimeout(() => { timedOut = true; controller.abort() }, 8000) : undefined
+    try {
+      const result = await this.request<{ voltage?: number, error?: string }>('/api/getHETriggerVoltage', {
+        method: 'POST',
+        body: JSON.stringify({ targetId: channel }),
+        ...(controller ? { signal: controller.signal } : {}),
+      })
+      if (typeof result.voltage !== 'number' || !Number.isFinite(result.voltage)) {
+        throw new Error(result.error ?? `No voltage returned for CH${channel}`)
+      }
+      return result.voltage
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      if (timedOut || /timed?\s*out|timeout/i.test(detail)) {
+        const timeoutError = new Error('Live Hall voltage read timed out; reconnect before starting calibration')
+        timeoutError.name = 'LiveHallReadTimeoutError'
+        throw timeoutError
+      }
+      throw error
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout)
+    }
   }
 
   async previewConfig(): Promise<void> {}

@@ -69,7 +69,7 @@
 1. [x] Add selectable `HttpTransport` for a real RapidJAM at `http://192.168.7.1`. Use `?transport=http` in the app URL.
 2. [x] Implement `getPinMappings` and `setPinMappings` mapping between GP2040-CE JSON and the app's GP0-GP5 model.
 3. [x] Implement `getHETriggerCalibrations` and `setHETriggerCalibrations` mapping for CH0-CH15.
-4. [ ] Implement `getHETriggerVoltage` for live Hall signal display.
+4. [x] Add a read-only live Hall voltage request and display the selected channel's estimated travel with fixed actuation/release threshold markers. Physical-device verification remains below.
 5. [x] Add request logging, network error context, and a visible connection diagnostic for unreachable devices. More granular firmware/value errors remain.
 6. [ ] Verify save with a readback on physical hardware. The current GP2040 endpoints save immediately, so preview is local until commit.
 7. [x] Test with the physical RapidJAM in WebConfig/RNDIS mode through the VS Code browser. Firmware and Hall/GPIO reads succeeded.
@@ -94,6 +94,22 @@ The HTTP adapter currently preserves the API's raw Hall calibration values and c
 - [x] Add clickable failed channels for individual retry without rerunning successful channels.
 - [x] Apply valid results to the local draft only; durable storage remains `Save to device`.
 - [ ] Validate the full capture flow on physical RapidJAM. The configurator now retries ADC29 reads up to four times per channel; channels that still fail remain visible as errors instead of aborting the entire run.
+
+## Live Hall Travel Meter
+
+- [x] Convert live ADC voltage to estimated 0–1.5 mm travel using the channel's idle/pressed calibration values, including reversed polarity and invalid-calibration handling.
+- [x] Poll only the active channel while the magnetic-switch editor is open; use a single read-only request at a time. Screen, busy, and calibration state stop future polling; calibration entry additionally pauses the shared coordinator and waits for the active request to settle before device preparation begins.
+- [x] Keep the automatic-calibration retry path unchanged; live display does not call the calibration preparation endpoint or write device settings.
+- [x] Display live estimated travel separately from fixed actuation and RT threshold/release-point setting markers. Clearly label the markers as settings, not observed reset events.
+- [x] Show unavailable/error and demo-mode states without presenting mock idle values as hardware readings; document that only the active channel is shown during multi-selection.
+- [x] Add unit tests for polarity, endpoints, clamping, and invalid inputs; run `npm run test:hall-travel` and the production build.
+- [x] Add delayed-request tests proving that calibration preparation cannot proceed until the in-flight live read settles; block further reads during the wait.
+- [x] Fail closed after an 8-second live-read timeout and require a successful reconnect to resume live polling or calibration. The Tauri bridge's existing 8-second request timeout remains unchanged.
+- [x] Use a 500ms delay after each live-read response before polling again. A single transient read failure retains and labels the last successful value; show the red warning after three consecutive failures. A request timeout still fails immediately and requires reconnect.
+- [x] Cover transient failure, recovery, three consecutive failures, initial failures, and immediate timeout in state-transition tests.
+- [ ] Verify polling cadence/load and the transient/persistent error display on physical RapidJAM over WebConfig and Tauri; adjust `POLL_INTERVAL_MS` if responsiveness or HTTP/device load warrants it.
+- [ ] Exercise the full UI cancellation and delayed-read transition in a browser/Tauri test, including cancellation during baseline setup. Unit tests cover coordinator ordering; browser-level lifecycle coverage is not automated yet.
+- [ ] Verify CH0–CH15 live travel, threshold markers, channel switching, failure/recovery, and no impact to calibration/save on physical RapidJAM with ADC29-capable firmware (WebConfig and/or Tauri). Hardware verification has not been performed as part of this change.
 
 ### Firmware prerequisite discovered
 
