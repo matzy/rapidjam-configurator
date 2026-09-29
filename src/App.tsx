@@ -113,7 +113,7 @@ export function App() {
       </div>
     </div>}
     <header className="topbar">
-      <div className="brand"><div className="brand-mark">RJ</div><div><strong>RapidJAM</strong><span>{t('CONTROL CENTER')}</span></div></div>
+      <div className="brand"><div className="brand-mark">RJ</div><div><strong>RapidJAM</strong><span>{t('CONFIGURATOR')}</span></div></div>
       <div className="device-status"><span className={`status-dot ${device ? 'online' : ''}`} />{device ? device.product : t('No device connected')}<span className="firmware">{device?.firmware ?? t('Connect a controller to begin')}</span></div>
       <label className="language-picker"><span className="visually-hidden">{t('Select language')}</span><select aria-label={t('Select language')} value={locale} onChange={(event) => setLocale(event.target.value as 'en' | 'ja')}><option value="ja">日本語</option><option value="en">English</option></select></label>
       <button className="icon-button" title={t('Help')} aria-label={t('Help')}><CircleHelp size={18} /></button>

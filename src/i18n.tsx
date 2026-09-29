@@ -6,7 +6,7 @@ const STORAGE_KEY = 'rapidjam.locale'
 // Product names, protocol identifiers, physical button labels, and API values are
 // deliberately kept as entered in English; only user-facing prose is translated.
 const japanese: Record<string, string> = {
-  'CONTROL CENTER': 'コントロールセンター',
+  'CONFIGURATOR': '設定アプリ',
   'CONFIGURATION': '設定',
   'INPUT LAYOUT': '入力レイアウト',
   'MAGNETIC INPUT': '磁気入力',
