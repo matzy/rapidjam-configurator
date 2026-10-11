@@ -150,7 +150,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
       setResults(Object.fromEntries(buffersRef.current.baselines.map((idle, channel) => [`ch${channel}`, samples[channel].length >= CALIBRATION_SAMPLE_TARGET ? { idle, pressed: null, polarity: null, status: 'waiting', sampleCount: samples[channel].length, latestVoltage: samples[channel][samples[channel].length - 1] } : { idle, pressed: null, polarity: null, status: 'error', sampleCount: samples[channel].length, latestVoltage: samples[channel][samples[channel].length - 1], error: baselineErrors[channel] ?? 'Fewer than three successful baseline samples' }])) as CalibrationResults)
       setStage('capture')
       setProgress({ phase: 'Press phase ready', channel: null, attempt: 0, successful: 0, total: 16 })
-      setNotice('Press each Hall button fully, in any order')
+      setNotice('Press each Hall button all the way as you normally would, in any order')
     } catch {
       if (!cancelled.current) { setStage('error'); setNotice('Calibration failed') }
     }

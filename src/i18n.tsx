@@ -137,7 +137,8 @@ const japanese: Record<string, string> = {
   'Raw calibration results': '校正結果の詳細', 'Calibration results': '校正結果', 'CH': 'CH', 'Button': 'ボタン', 'Idle': '未押下', 'Pressed': '押下', 'Span': '変化量', 'Samples': 'サンプル数', 'Latest': '最新値', 'Status': '状態', 'Polarity': '極性',
   'preparing': '準備中', 'waiting': '待機中', 'pressing': '押下中', 'complete': '完了', 'skipped': 'スキップ', 'unstable': '不安定', 'error': 'エラー',
   'AUTOMATIC CALIBRATION': '自動校正', 'Leave all Hall buttons untouched. The configurator is sampling every channel automatically.': '磁気スイッチに触れないでください。設定アプリが各チャンネルを自動測定しています。',
-  'Press each button fully once, in any order. Completed buttons turn green.': '順番は自由です。各ボタンを一度、最後まで押してください。完了したボタンは緑色になります。',
+  'Press each button once, in any order. Completed buttons turn green.': '順番は自由です。各ボタンを一度押してください。完了したボタンは緑色になります。',
+  'Press all the way, just like you normally press the button. This calibrates to match how you actually play.': '普段ボタンを押す感じで押し切ってください。実態に合った状態で調整できます。',
   'Calibration results saved to RapidJAM': '校正結果を RapidJAM に保存しました',
   'No completed calibration results to apply': '反映できる校正結果がありません', 'Calibration failed': '校正に失敗しました', 'Calibration save failed': '校正結果を保存できませんでした', 'Calibration cancelled': '校正をキャンセルしました',
   'RapidJAM is ready for re-measurement': 'RapidJAM は再測定の準備ができました',
@@ -145,7 +146,7 @@ const japanese: Record<string, string> = {
   'Baseline sample {{round}} / {{total}}': '未押下値を測定中 {{round}} / {{total}}',
   'All Hall channels are complete. Review the results before applying them.': 'すべてのチャンネルの測定が完了しました。反映する前に結果を確認してください。',
   'Leave all Hall buttons untouched while measuring idle values': '未押下値の測定中は磁気スイッチに触れないでください',
-  'Press each Hall button fully, in any order': '順番は自由です。各磁気スイッチを最後まで押してください',
+  'Press each Hall button all the way as you normally would, in any order': '順番は自由です。各磁気スイッチを、普段ボタンを押す感じで押し切ってください',
   'Live Hall calibration is disabled: the current firmware cannot read RapidJAM ADC29': '現在のファームウェアは RapidJAM の ADC29 を読み取れないため、ライブ校正を利用できません',
   'Voltage read failed': '電圧を読み取れませんでした', 'Fewer than three successful baseline samples': '未押下値を3回以上取得できませんでした', 'Button released before three samples': '3回のサンプル取得前にボタンが離されました', 'Skipped by user': 'ユーザーがスキップしました',
 
