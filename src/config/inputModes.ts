@@ -14,12 +14,17 @@ export const INPUT_MODE_OPTIONS: InputModeOption[] = [
   { value: 3, label: 'Keyboard', group: 'PC / current' },
   { value: 4, label: 'PS4', group: 'console', deviceTypes: [0, 1, 2, 3, 4], authFields: ['ps4AuthType'] },
   { value: 5, label: 'Xbox One', group: 'console' },
+  { value: 6, label: 'Mega Drive / Genesis Mini', group: 'console' },
+  { value: 7, label: 'NEOGEO mini', group: 'console' },
+  { value: 8, label: 'PC Engine mini', group: 'console' },
+  { value: 9, label: 'Egret II mini', group: 'console' },
+  { value: 10, label: 'Astro City mini', group: 'console' },
+  { value: 11, label: 'PlayStation Classic', group: 'console' },
   { value: 12, label: 'Original Xbox', group: 'console' },
   { value: 13, label: 'PS5', group: 'console', deviceTypes: [0, 6, 1, 2, 3, 4], authFields: ['ps5AuthType'] },
   { value: 14, label: 'Generic HID', group: 'PC / current', usbOverride: true },
   { value: 15, label: 'Nintendo Switch Pro', group: 'console' },
   { value: 16, label: 'P5 General', group: 'console', authFields: ['ps5AuthType'] },
-  { value: 17, label: 'SInput', group: 'PC / current' },
 ]
 
 export const DEVICE_TYPE_OPTIONS = [

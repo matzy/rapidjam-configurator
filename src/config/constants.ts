@@ -1,20 +1,28 @@
-import type { Action, GpioAssignment, GpioPin, HallChannel } from '../device'
-
-export const HALL_LABELS: Record<HallChannel, string> = {
-  ch0: 'B2', ch1: 'R2', ch2: 'L2', ch3: 'B3', ch4: 'B4', ch5: 'R1', ch6: 'L1', ch7: 'S1',
-  ch8: 'LEFT', ch9: 'DOWN', ch10: 'L3', ch11: 'UP', ch12: 'RIGHT', ch13: 'S2', ch14: 'B1', ch15: 'R3',
-}
+import type { Action, GpioAssignment, GpioPin } from '../device'
+import type { TranslationValues } from '../i18nContext'
 
 export const GPIO_LABELS: Record<GpioPin, string> = { gp0: 'GP0', gp1: 'GP1', gp2: 'GP2', gp3: 'GP3', gp4: 'GP4', gp5: 'GP5' }
 
 export const ACTIONS: Action[] = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'B1', 'B2', 'B3', 'B4', 'L1', 'R1', 'L2', 'R2', 'L3', 'R3', 'S1', 'S2', 'A1', 'A2', 'NONE']
 
-export const GPIO_ASSIGNMENTS: Array<{ value: GpioAssignment, label: string }> = [
-  ...ACTIONS.map((action) => ({ value: action, label: action === 'NONE' ? 'Unassigned' : action })),
-  { value: 'TURBO_B1', label: 'Turbo · B1' }, { value: 'TURBO_B2', label: 'Turbo · B2' }, { value: 'TURBO_B3', label: 'Turbo · B3' }, { value: 'TURBO_B4', label: 'Turbo · B4' },
-  { value: 'MACRO_1', label: 'Macro 1' }, { value: 'MACRO_2', label: 'Macro 2' }, { value: 'MACRO_3', label: 'Macro 3' }, { value: 'MACRO_4', label: 'Macro 4' },
-  { value: 'ACCELERATOR', label: 'Accelerator' }, { value: 'BRAKE', label: 'Brake' }, { value: 'HOME', label: 'Home' }, { value: 'MENU_DOWN', label: 'Menu Down' }, { value: 'MENU_SELECT', label: 'Menu Select' }, { value: 'MENU_BACK', label: 'Menu Back' }, { value: 'FN', label: 'Function (Fn)' },
+export const GPIO_ASSIGNMENTS: GpioAssignment[] = [
+  ...ACTIONS,
+  'TURBO_B1', 'TURBO_B2', 'TURBO_B3', 'TURBO_B4',
+  'MACRO_1', 'MACRO_2', 'MACRO_3', 'MACRO_4',
+  'ACCELERATOR', 'BRAKE', 'HOME', 'MENU_DOWN', 'MENU_SELECT', 'MENU_BACK', 'FN',
 ]
+
+const GPIO_SPECIAL_LABELS: Partial<Record<GpioAssignment, string>> = {
+  NONE: 'Unassigned',
+  MACRO_1: 'Macro 1', MACRO_2: 'Macro 2', MACRO_3: 'Macro 3', MACRO_4: 'Macro 4',
+  ACCELERATOR: 'Accelerator', BRAKE: 'Brake', HOME: 'Home', MENU_DOWN: 'Menu Down', MENU_SELECT: 'Menu Select', MENU_BACK: 'Menu Back', FN: 'Function (Fn)',
+}
+
+export function gpioAssignmentLabel(assignment: GpioAssignment, actionLabel: (action: Action) => string, t: (text: string, values?: TranslationValues) => string): string {
+  if (assignment.startsWith('TURBO_')) return t('Turbo · {{button}}', { button: actionLabel(assignment.slice('TURBO_'.length) as Action) })
+  const special = GPIO_SPECIAL_LABELS[assignment]
+  return special ? t(special) : actionLabel(assignment as Action)
+}
 
 export const CALIBRATION_POLL_INTERVAL_MS = 250
 export const CALIBRATION_BASELINE_WAIT_MS = 45
