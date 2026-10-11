@@ -1,14 +1,16 @@
+import { POSITION_STEP_MM } from '../utils/calibrationMath'
+
 interface SettingSliderProps {
   label: string
   value: number
-  max?: number
+  max: number
   onChange: (value: number) => void
 }
 
-export function SettingSlider({ label, value, max = 1.5, onChange }: SettingSliderProps) {
+export function SettingSlider({ label, value, max, onChange }: SettingSliderProps) {
   return <div className="slider-field">
     <div className="slider-label"><label htmlFor={label}>{label}</label><output>{value.toFixed(2)} mm</output></div>
-    <input id={label} type="range" min="0.05" max={max} step="0.05" value={value} onChange={(event) => onChange(Math.min(max, Number(event.target.value)))} />
+    <input id={label} type="range" min={POSITION_STEP_MM} max={max} step={POSITION_STEP_MM} value={Math.min(max, Math.max(POSITION_STEP_MM, value))} onChange={(event) => onChange(Number(event.target.value))} />
   </div>
 }
 

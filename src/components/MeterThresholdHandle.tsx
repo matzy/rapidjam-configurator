@@ -1,9 +1,10 @@
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
-import { meterClientXToMillimeters } from '../utils/calibrationMath'
+import { meterClientXToMillimeters, POSITION_STEP_MM } from '../utils/calibrationMath'
 
 interface MeterThresholdHandleProps {
   trackRef: RefObject<HTMLDivElement | null>
   sessionKey: string
+  strokeMm: number
   value: number
   displayValue: number
   label: string
@@ -14,7 +15,7 @@ interface MeterThresholdHandleProps {
   onCommit: (value: number) => void
 }
 
-export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue, label, className, style, max = 1.5, onPreview, onCommit }: MeterThresholdHandleProps) {
+export function MeterThresholdHandle({ trackRef, sessionKey, strokeMm, value, displayValue, label, className, style, max = strokeMm, onPreview, onCommit }: MeterThresholdHandleProps) {
   const dragging = useRef<number | null>(null)
   const startValue = useRef(value)
   const pendingValue = useRef(value)
@@ -45,7 +46,7 @@ export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue
   function valueAt(clientX: number): number | null {
     const rect = trackRef.current?.getBoundingClientRect()
     if (!rect) return null
-    const nextValue = meterClientXToMillimeters(clientX, rect.left, rect.width)
+    const nextValue = meterClientXToMillimeters(clientX, rect.left, rect.width, strokeMm)
     return nextValue === null ? null : Math.min(max, nextValue)
   }
 
@@ -89,9 +90,9 @@ export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     let nextValue: number | null = null
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextValue = Math.max(0.05, value - 0.05)
-    else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextValue = value + 0.05
-    else if (event.key === 'Home') nextValue = 0.05
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextValue = Math.max(POSITION_STEP_MM, value - POSITION_STEP_MM)
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextValue = Math.min(max, value + POSITION_STEP_MM)
+    else if (event.key === 'Home') nextValue = POSITION_STEP_MM
     else if (event.key === 'End') nextValue = max
     else if (event.key === 'Escape' && dragging.current !== null) {
       event.preventDefault()

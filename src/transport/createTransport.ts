@@ -7,7 +7,8 @@ export function isTauriRuntime(): boolean {
 
 export function createTransport(search = window.location.search): DeviceTransport {
   if (isTauriRuntime()) return new HttpTransport('', true)
-  return new URLSearchParams(search).get('transport') === 'http'
+  const params = new URLSearchParams(search)
+  return params.get('transport') === 'http'
     ? new HttpTransport('/rapidjam-api')
-    : new MockTransport()
+    : new MockTransport(params.get('mockBoard')?.trim() || 'RapidJAM')
 }

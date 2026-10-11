@@ -1,7 +1,5 @@
 import type { HallSetting } from '../device'
-
-const hallMillimetersToRaw = (millimeters: number, idle: number, pressed: number): number =>
-  Math.round(idle + (Math.max(0, Math.min(1.5, millimeters)) / 1.5) * (pressed - idle))
+import { ratioToRaw } from './calibrationMath.ts'
 
 export type HallInputEstimate = 'on' | 'off' | 'unknown'
 
@@ -15,21 +13,21 @@ export const initialHallInputHistory = (): HallInputHistory => ({ state: 'unknow
 // Approximation of HETriggerAddon::preprocess(), not the firmware's triggerActive state.
 // The HTTP voltage may use a different smoothing path and skips intermediate samples.
 export function estimateHallInput(previous: HallInputHistory, voltage: number, setting: HallSetting): HallInputHistory {
-  const { idle, pressed, press, release, noise, polarity, calibrated, rapidTrigger } = setting
-  if (!calibrated || ![voltage, idle, pressed, press, ...(rapidTrigger ? [release, noise] : [])].every(Number.isFinite)
+  const { idle, pressed, pressRatio, releaseRatio, noise, polarity, calibrated, rapidTrigger } = setting
+  if (!calibrated || ![voltage, idle, pressed, pressRatio, ...(rapidTrigger ? [releaseRatio, noise] : [])].every(Number.isFinite)
     || Math.abs(pressed - idle) < 1 || (rapidTrigger && (noise < 0 || noise > 4095))
-    || press < 0.05 || press > 1.5 || (rapidTrigger && (release < 0.05 || release > 1.5))
+    || pressRatio < 0 || pressRatio > 1 || (rapidTrigger && (releaseRatio < 0 || releaseRatio > 1))
     || (polarity !== 'N' && polarity !== 'P') || voltage < 0 || voltage > 4095) {
     return initialHallInputHistory()
   }
 
   const normalize = (raw: number) => polarity === 'P' ? 4095 - raw : raw
   const value = normalize(voltage)
-  const active = normalize(hallMillimetersToRaw(press, idle, pressed))
+  const active = normalize(ratioToRaw(pressRatio, idle, pressed))
   // RT OFF firmware compares only with active (strict >); it ignores release.
   if (!rapidTrigger) return { state: value > active ? 'on' : 'off', lastIncrement: value }
 
-  const threshold = normalize(hallMillimetersToRaw(release, idle, pressed))
+  const threshold = normalize(ratioToRaw(releaseRatio, idle, pressed))
 
   if (previous.lastIncrement === null) return { state: 'unknown', lastIncrement: value }
   const difference = value - previous.lastIncrement

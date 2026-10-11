@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, ShieldAlert, Usb, Zap } from 'lucide-react'
 import { Action, DeviceConfig, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from './device'
 import { HALL_LABELS } from './config/constants'
-import { rawToMillimeters, secondHighest, secondLowest } from './utils/calibrationMath'
+import { rawToRatio, secondHighest, secondLowest } from './utils/calibrationMath'
 import type { CalibrationResults } from './types/calibration'
 import { ControllerDisplay as Controller } from './components/ControllerDisplay'
 import { SettingNumber, SettingSlider } from './components/SettingControls'
@@ -11,6 +11,7 @@ import { HallPanel as HallPanelComponent } from './components/HallPanel'
 import { CalibrationPanel as CalibrationPanelComponent, CalibrationWorkspace as CalibrationWorkspaceComponent } from './components/CalibrationWorkspace'
 import { createTransport } from './transport/createTransport'
 import { useDeviceConfig } from './hooks/useDeviceConfig'
+import { useStrokeSetting } from './hooks/useStrokeSetting'
 import { useHallCalibration } from './hooks/useHallCalibration'
 import { useHallTravel } from './hooks/useHallTravel'
 import { HallLiveReadCoordinator, LiveHallReadTimeoutError } from './transport/HallLiveReadCoordinator'
@@ -20,7 +21,6 @@ import { actuationMaxFor } from './config/settingMode'
 
 const transport: DeviceTransport = createTransport()
 const hallLabels = HALL_LABELS
-const rawToMm = rawToMillimeters
 const hallChannels = Array.from({ length: 16 }, (_, index) => `ch${index}` as HallChannel)
 
 export function App() {
@@ -29,6 +29,7 @@ export function App() {
   const [expertConfirmOpen, setExpertConfirmOpen] = useState(false)
   const deviceConfig = useDeviceConfig(transport)
   const { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateMapping, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration } = deviceConfig
+  const strokeSetting = useStrokeSetting(device, settingMode)
   const [activeButton, setActiveButton] = useState<HallChannel>('ch14')
   const [selectedHallButtons, setSelectedHallButtons] = useState<HallChannel[]>(['ch14'])
   const [section, setSection] = useState<'mapping' | 'hall'>('mapping')
@@ -135,11 +136,11 @@ export function App() {
       const old = config.hall[id]
       const sign = result.polarity === 'N' ? 1 : -1
       const span = Math.abs(result.pressed - result.idle)
-      const activeFraction = Math.max(0.05, Math.min(0.95, Math.abs(old.active - old.idle) / Math.max(1, Math.abs(old.pressed - old.idle))))
-      const releaseFraction = Math.max(0.05, Math.min(0.95, Math.abs(old.release - old.idle) / Math.max(1, Math.abs(old.pressed - old.idle))))
+      const activeFraction = Math.max(0.05, Math.min(0.95, rawToRatio(old.active, old.idle, old.pressed)))
+      const releaseFraction = Math.max(0.05, Math.min(0.95, rawToRatio(old.threshold, old.idle, old.pressed)))
       const activeRaw = Math.round(result.idle + sign * span * activeFraction)
       const releaseRaw = Math.round(result.idle + sign * span * releaseFraction)
-      nextHall[id] = { ...old, idle: result.idle, pressed: result.pressed, active: activeRaw, threshold: releaseRaw, press: rawToMm(activeRaw, result.idle, result.pressed), release: rawToMm(releaseRaw, result.idle, result.pressed), polarity: result.polarity, calibrated: true }
+      nextHall[id] = { ...old, idle: result.idle, pressed: result.pressed, active: activeRaw, threshold: releaseRaw, pressRatio: rawToRatio(activeRaw, result.idle, result.pressed), releaseRatio: rawToRatio(releaseRaw, result.idle, result.pressed), polarity: result.polarity, calibrated: true }
       patches[id] = { idle: result.idle, active: activeRaw, pressed: result.pressed, threshold: releaseRaw, polarity: result.polarity }
     })
     if (!Object.keys(patches).length) {
@@ -217,7 +218,7 @@ export function App() {
 
       <section className="content">
         <div className="content-heading"><div><p className="eyebrow">{t(section === 'mapping' ? 'INPUT LAYOUT' : 'MAGNETIC INPUT')}</p><h1>{t(section === 'mapping' ? 'Button mapping' : 'Magnetic switches')}</h1><p className="lede">{t(section === 'mapping' ? 'Tune every input for the way you play.' : 'Shape the exact moment each button responds.')}</p></div><div className="notice"><span className="notice-dot" />{t(notice)}</div></div>
-        {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} onInputModeChange={updateInputMode} onKeyboardMappingChange={updateKeyboardMapping} /> : <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} selectedButtons={selectedHallButtons} hall={activeHall} travelReading={hallTravel} isDemo={device?.transport === 'mock'} calibrationStarting={calibrationStarting} calibrationBlocked={hallLiveReads.requiresReconnect} onSelect={selectHallButton} onSelectAll={selectAllHallButtons} onChange={updateHallMany} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} actuationMax={actuationMaxFor(settingMode)} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} />}
+        {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} onInputModeChange={updateInputMode} onKeyboardMappingChange={updateKeyboardMapping} /> : <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} selectedButtons={selectedHallButtons} hall={activeHall} travelReading={hallTravel} strokeMm={strokeSetting.strokeMm} strokeLabel={strokeSetting.label} strokeSource={strokeSetting.source} showStrokeEditor={strokeSetting.showEditor} unsupportedDevice={strokeSetting.unsupportedDevice} onStrokeChange={strokeSetting.setCustomStroke} onStrokeReset={strokeSetting.resetStroke} isDemo={device?.transport === 'mock'} calibrationStarting={calibrationStarting} calibrationBlocked={hallLiveReads.requiresReconnect} onSelect={selectHallButton} onSelectAll={selectAllHallButtons} onChange={updateHallMany} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} actuationMax={actuationMaxFor(settingMode, strokeSetting.strokeMm)} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} />}
       </section>
     </main>
 

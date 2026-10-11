@@ -110,6 +110,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .meter-legend i { display: block; width: 3px; height: 14px; justify-self: center; }
 .meter-legend .actuation-key { background: #70d5df; }
 .meter-legend .threshold-key { border-right: 2px dashed #ef7777; }
+.meter-stroke-setting { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; color: #b8c4be; font-size: 10px; }
+.meter-stroke-setting input { width: 72px; padding: 4px 6px; border: 1px solid var(--line); color: #e6ece9; background: #202b2e; font: 10px 'DM Mono', monospace; }
+.meter-stroke-setting .text-button { padding: 3px 5px; font-size: 10px; }
 .meter-input-indicator { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; }
 .meter-input-caption { color: #b8c4be; }
 .meter-input-state { padding: 4px 9px; border: 1px solid var(--line); color: var(--muted); background: #202b2e; font: 11px 'DM Mono', monospace; }

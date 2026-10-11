@@ -16,7 +16,7 @@ export interface HallTravelReading {
 const POLL_INTERVAL_MS = 200
 
 export function useHallTravel(transport: DeviceTransport, channel: HallChannel, enabled: boolean, coordinator: HallLiveReadCoordinator, setting: HallSetting): HallTravelReading {
-  const settingKey = [setting.idle, setting.pressed, setting.press, setting.rapidTrigger ? setting.release : 'unused', setting.rapidTrigger ? setting.noise : 'unused', setting.polarity, setting.rapidTrigger, setting.calibrated].join('|')
+  const settingKey = [setting.idle, setting.pressed, setting.pressRatio, setting.rapidTrigger ? setting.releaseRatio : 'unused', setting.rapidTrigger ? setting.noise : 'unused', setting.polarity, setting.rapidTrigger, setting.calibrated].join('|')
   const [reading, setReading] = useState<HallTravelReading & { channel: HallChannel | null, settingKey: string }>({ status: 'inactive', voltage: null, inputEstimate: 'unknown', channel: null, settingKey: '' })
 
   useEffect(() => {

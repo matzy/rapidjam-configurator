@@ -10,8 +10,8 @@ const normalSetting: HallSetting = {
   threshold: 2500,
   noise: 50,
   polarity: 'N',
-  press: 0.75,
-  release: 1.125,
+  pressRatio: 0.5,
+  releaseRatio: 0.75,
   rapidTrigger: false,
   calibrated: true,
 }
@@ -25,7 +25,7 @@ test('RT off follows firmware active-only comparison with strict greater-than, f
 })
 
 test('RT on applies strict ADC noise delta and inclusive firmware actuation/release thresholds', () => {
-  const setting = { ...normalSetting, rapidTrigger: true, release: 0.75 }
+  const setting = { ...normalSetting, rapidTrigger: true, releaseRatio: 0.75 }
   const start = estimateHallInput(initialHallInputHistory(), 1500, setting)
   assert.equal(start.state, 'unknown')
   const noiseBoundary = estimateHallInput(start, 1550, setting)
@@ -39,7 +39,7 @@ test('RT on applies strict ADC noise delta and inclusive firmware actuation/rele
 })
 
 test('RT off ignores release and noise; invalid RT-on release or noise is unknown', () => {
-  const offWithInvalidRelease = { ...normalSetting, release: Number.NaN, noise: Number.NaN }
+  const offWithInvalidRelease = { ...normalSetting, releaseRatio: Number.NaN, noise: Number.NaN }
   assert.equal(estimateHallInput(initialHallInputHistory(), 2001, offWithInvalidRelease).state, 'on')
   const onWithInvalidRelease = { ...offWithInvalidRelease, rapidTrigger: true }
   assert.equal(estimateHallInput(initialHallInputHistory(), 2001, onWithInvalidRelease).state, 'unknown')
