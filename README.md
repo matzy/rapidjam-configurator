@@ -12,7 +12,7 @@ A Windows desktop app for configuring a RapidJAM controller. It talks to the con
 - Automatic calibration of all channels
 - Standard / Expert mode, and a Japanese / English UI
 
-The user guide ([docs/USER_GUIDE.ja.md](docs/USER_GUIDE.ja.md)) is currently available in Japanese only.
+The user guide is available in [English](docs/USER_GUIDE.en.md) and [Japanese](docs/USER_GUIDE.ja.md).
 
 ## Requirements
 
