@@ -16,7 +16,7 @@
     "tauri:build": "tauri build",
     "release:check": "node scripts/check-release-metadata.mjs .",
     "test:dev-config": "node --test scripts/dev-config.test.mjs",
-    "test:hall-travel": "node --experimental-strip-types --test tests/calibrationMath.test.ts tests/hallInputEstimate.test.ts tests/hallLiveReadCoordinator.test.ts tests/liveReadingState.test.ts"
+    "test:hall-travel": "node --experimental-strip-types --test tests/calibrationMath.test.ts tests/hallInputEstimate.test.ts tests/hallLiveReadCoordinator.test.ts tests/liveReadingState.test.ts tests/settingMode.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",

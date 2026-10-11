@@ -43,6 +43,11 @@ const japanese: Record<string, string> = {
   'English': 'English',
   '日本語': '日本語',
   'Select language': '表示言語',
+  'Expert mode': 'エキスパートモード',
+  'Switch to Expert mode?': 'エキスパートモードに切り替えますか？',
+  'Switch to Expert mode, which allows settings that are not recommended. Continue?': '推奨されない設定を行えるエキスパートモードに切り替えます。よろしいですか？',
+  'Switch mode': '切り替える',
+  'Actuation point above {{value}} mm requires Expert mode': '{{value}} mm を超えるアクチュエーションポイントはエキスパートモードでのみ設定できます',
 
   'Controller mapping': 'コントローラーの割り当て',
   'Keyboard mapping': 'キーボードの割り当て',

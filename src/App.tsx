@@ -1,5 +1,5 @@
-import { useRef, useState, type MouseEvent } from 'react'
-import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, Usb, Zap } from 'lucide-react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, ShieldAlert, Usb, Zap } from 'lucide-react'
 import { Action, DeviceConfig, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from './device'
 import { HALL_LABELS } from './config/constants'
 import { rawToMillimeters, secondHighest, secondLowest } from './utils/calibrationMath'
@@ -15,6 +15,8 @@ import { useHallCalibration } from './hooks/useHallCalibration'
 import { useHallTravel } from './hooks/useHallTravel'
 import { HallLiveReadCoordinator, LiveHallReadTimeoutError } from './transport/HallLiveReadCoordinator'
 import { useLocale } from './useLocale'
+import { useSettingMode } from './hooks/useSettingMode'
+import { actuationMaxFor } from './config/settingMode'
 
 const transport: DeviceTransport = createTransport()
 const hallLabels = HALL_LABELS
@@ -23,6 +25,8 @@ const hallChannels = Array.from({ length: 16 }, (_, index) => `ch${index}` as Ha
 
 export function App() {
   const { locale, setLocale, t } = useLocale()
+  const { settingMode, setSettingMode } = useSettingMode()
+  const [expertConfirmOpen, setExpertConfirmOpen] = useState(false)
   const deviceConfig = useDeviceConfig(transport)
   const { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateMapping, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration } = deviceConfig
   const [activeButton, setActiveButton] = useState<HallChannel>('ch14')
@@ -38,6 +42,26 @@ export function App() {
 
   const activeHall = config.hall[activeButton]
   const hallTravel = useHallTravel(transport, activeButton, section === 'hall' && calibrationStage === 'idle' && !busy && !connectionFailed && !restartComplete && device !== null && device.transport !== 'mock', hallLiveReads, activeHall)
+
+  useEffect(() => {
+    if (!expertConfirmOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpertConfirmOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [expertConfirmOpen])
+
+  function requestSettingMode(mode: 'standard' | 'expert') {
+    if (mode === settingMode) return
+    if (mode === 'expert') setExpertConfirmOpen(true)
+    else setSettingMode('standard')
+  }
+
+  function confirmExpertMode() {
+    setSettingMode('expert')
+    setExpertConfirmOpen(false)
+  }
 
   function selectHallButton(id: HallChannel, event?: MouseEvent<HTMLButtonElement>) {
     if (!event?.shiftKey && !event?.ctrlKey && !event?.metaKey) {
@@ -164,14 +188,26 @@ export function App() {
         {restartComplete ? <><h2>{t('RapidJAM is restarting in gamepad mode')}</h2><p>{t('The configurator connection will close while RapidJAM returns to normal gamepad operation.')}</p></> : <><h2>{t('Cannot connect to RapidJAM')}</h2><p>{t('Check the USB connection and press Retry. Other controls are unavailable until the connection is restored.')}</p>{diagnostic && <code>{diagnostic}</code>}<button className="primary-button" onClick={() => void reconnectDevice()} disabled={busy}>{t(busy ? 'Connecting...' : 'Retry')}</button></>}
       </div>
     </div>}
-    <header className="topbar">
+    {expertConfirmOpen && <div className="connect-error-overlay">
+      <div className="connect-error-card" role="alertdialog" aria-modal="true" aria-labelledby="expert-mode-title" aria-describedby="expert-mode-description">
+        <ShieldAlert size={40} />
+        <h2 id="expert-mode-title">{t('Switch to Expert mode?')}</h2>
+        <p id="expert-mode-description">{t('Switch to Expert mode, which allows settings that are not recommended. Continue?')}</p>
+        <div className="confirm-actions">
+          <button className="secondary-button" autoFocus onClick={() => setExpertConfirmOpen(false)}>{t('Cancel')}</button>
+          <button className="primary-button" onClick={confirmExpertMode}>{t('Switch mode')}</button>
+        </div>
+      </div>
+    </div>}
+    <header className="topbar" inert={expertConfirmOpen || undefined}>
       <div className="brand"><div className="brand-mark">RJ</div><div><strong>RapidJAM</strong><span>{t('CONFIGURATOR')}</span></div></div>
       <div className="device-status"><span className={`status-dot ${device ? 'online' : ''}`} />{device ? device.product : t('No device connected')}<span className="firmware">{device?.firmware ?? t('Connect a controller to begin')}</span></div>
+      <button type="button" className={`setting-mode-switch ${settingMode === 'expert' ? 'selected' : ''}`} aria-pressed={settingMode === 'expert'} onClick={() => requestSettingMode(settingMode === 'expert' ? 'standard' : 'expert')}>{t('Expert mode')}</button>
       <label className="language-picker"><span className="visually-hidden">{t('Select language')}</span><select aria-label={t('Select language')} value={locale} onChange={(event) => setLocale(event.target.value as 'en' | 'ja')}><option value="ja">日本語</option><option value="en">English</option></select></label>
       <button className="icon-button" title={t('Help')} aria-label={t('Help')}><CircleHelp size={18} /></button>
     </header>
 
-    <main className="workspace" inert={connectionFailed || restartComplete || undefined}>
+    <main className="workspace" inert={connectionFailed || restartComplete || expertConfirmOpen || undefined}>
       <aside className="sidebar">
         <div className="sidebar-heading">{t('CONFIGURATION')}</div>
         <button className={`nav-item ${section === 'mapping' ? 'selected' : ''}`} onClick={() => { calibrationStartToken.current += 1; setSection('mapping') }}><Link2 size={17} /> {t('Button mapping')} <ChevronRight size={15} /></button>
@@ -181,11 +217,10 @@ export function App() {
 
       <section className="content">
         <div className="content-heading"><div><p className="eyebrow">{t(section === 'mapping' ? 'INPUT LAYOUT' : 'MAGNETIC INPUT')}</p><h1>{t(section === 'mapping' ? 'Button mapping' : 'Magnetic switches')}</h1><p className="lede">{t(section === 'mapping' ? 'Tune every input for the way you play.' : 'Shape the exact moment each button responds.')}</p></div><div className="notice"><span className="notice-dot" />{t(notice)}</div></div>
-        {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} onInputModeChange={updateInputMode} onKeyboardMappingChange={updateKeyboardMapping} /> : <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} selectedButtons={selectedHallButtons} hall={activeHall} travelReading={hallTravel} isDemo={device?.transport === 'mock'} calibrationStarting={calibrationStarting} calibrationBlocked={hallLiveReads.requiresReconnect} onSelect={selectHallButton} onSelectAll={selectAllHallButtons} onChange={updateHallMany} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} />}
+        {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} onInputModeChange={updateInputMode} onKeyboardMappingChange={updateKeyboardMapping} /> : <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} selectedButtons={selectedHallButtons} hall={activeHall} travelReading={hallTravel} isDemo={device?.transport === 'mock'} calibrationStarting={calibrationStarting} calibrationBlocked={hallLiveReads.requiresReconnect} onSelect={selectHallButton} onSelectAll={selectAllHallButtons} onChange={updateHallMany} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} actuationMax={actuationMaxFor(settingMode)} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} />}
       </section>
     </main>
 
-    <footer className="actionbar" inert={connectionFailed || restartComplete || undefined}><div className="draft-state">{dirty ? <><span className="draft-dot" />{t('Unsaved changes')}</> : <><Check size={15} />{t('All changes saved')}</>}<span className="separator" />{t(device?.transport === 'mock' ? 'Demo device' : 'RapidJAM')}</div><div className="actions"><button className="secondary-button" onClick={() => void discard()} disabled={!dirty || busy}><RotateCcw size={16} />{t('Discard')}</button><button className="primary-button" onClick={() => void save()} disabled={!dirty || busy}><Save size={16} />{t(busy ? 'Saving...' : 'Save to device')}</button></div></footer>
+    <footer className="actionbar" inert={connectionFailed || restartComplete || expertConfirmOpen || undefined}><div className="draft-state">{dirty ? <><span className="draft-dot" />{t('Unsaved changes')}</> : <><Check size={15} />{t('All changes saved')}</>}<span className="separator" />{t(device?.transport === 'mock' ? 'Demo device' : 'RapidJAM')}</div><div className="actions"><button className="secondary-button" onClick={() => void discard()} disabled={!dirty || busy}><RotateCcw size={16} />{t('Discard')}</button><button className="primary-button" onClick={() => void save()} disabled={!dirty || busy}><Save size={16} />{t(busy ? 'Saving...' : 'Save to device')}</button></div></footer>
   </div>
 }
-

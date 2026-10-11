@@ -27,9 +27,10 @@ interface HallPanelProps {
   calibrationAvailable: boolean
   onStartCalibration: () => void
   calibrationPanel: ReactNode
+  actuationMax: number
 }
 
-export function HallPanel({ config, savedConfig, activeButton, selectedButtons, hall, travelReading, isDemo, calibrationStarting, calibrationBlocked, onSelect, onSelectAll, onChange, calibrationAvailable, onStartCalibration, calibrationPanel }: HallPanelProps) {
+export function HallPanel({ config, savedConfig, activeButton, selectedButtons, hall, travelReading, isDemo, calibrationStarting, calibrationBlocked, onSelect, onSelectAll, onChange, calibrationAvailable, onStartCalibration, calibrationPanel, actuationMax }: HallPanelProps) {
   const { t } = useLocale()
   const meterTrackRef = useRef<HTMLDivElement>(null)
   const [dragPreview, setDragPreview] = useState<{ field: 'press' | 'release', value: number } | null>(null)
@@ -39,6 +40,8 @@ export function HallPanel({ config, savedConfig, activeButton, selectedButtons, 
   const displayedPress = dragPreview?.field === 'press' ? dragPreview.value : hall.press
   const displayedRelease = dragPreview?.field === 'release' ? dragPreview.value : hall.release
   const actuationPosition = Math.max(0, Math.min(100, displayedPress / 1.5 * 100))
+  const restrictedActuationStart = actuationMax < 1.5 ? actuationMax / 1.5 * 100 : null
+  const updateActuation = (value: number) => onChange(selectedButtons, { press: Math.max(0.05, Math.min(actuationMax, value)) })
   const thresholdPosition = hall.rapidTrigger ? Math.max(0, Math.min(100, displayedRelease / 1.5 * 100)) : null
   const signalLabel = isDemo
     ? t('Demo signal · no hardware reading')
@@ -57,6 +60,7 @@ export function HallPanel({ config, savedConfig, activeButton, selectedButtons, 
           <div className="meter-label"><span>{t('{{channel}} · {{label}} estimated travel', { channel: activeButton.toUpperCase(), label: HALL_LABELS[activeButton] })}</span><strong>{travel === null ? '—' : `${travel.toFixed(2)} mm`}</strong></div>
           <div className="meter-control-track">
             <div ref={meterTrackRef} className={`meter-track ${travel === null ? 'unavailable' : ''} ${travelReading.status === 'stale' ? 'stale' : ''}`} role="meter" aria-valuemin={0} aria-valuemax={1.5} aria-valuenow={travel ?? undefined} aria-valuetext={travel === null ? undefined : `${travel.toFixed(2)} mm${travelReading.status === 'stale' ? ` · ${t('Previous reading')}` : ''}`} aria-label={t('{{channel}} estimated travel', { channel: activeButton.toUpperCase() })}>
+              {restrictedActuationStart !== null && <div className="meter-restricted-zone" style={{ left: `${restrictedActuationStart}%` }} title={t('Actuation point above {{value}} mm requires Expert mode', { value: actuationMax.toFixed(2) })} />}
               {travel !== null && <div className="meter-fill" style={{ width: `${travel / 1.5 * 100}%` }} />}
             </div>
             <div className="meter-handle-layer">
@@ -68,8 +72,9 @@ export function HallPanel({ config, savedConfig, activeButton, selectedButtons, 
                 label={t('Actuation point setting: {{value}} mm', { value: displayedPress.toFixed(2) })}
                 className="actuation"
                 style={{ left: `${actuationPosition}%` }}
+                max={actuationMax}
                 onPreview={(value) => setDragPreview(value === null ? null : { field: 'press', value })}
-                onCommit={(value) => onChange(selectedButtons, { press: value })}
+                onCommit={updateActuation}
               />
               {thresholdPosition !== null && <MeterThresholdHandle
                 trackRef={meterTrackRef}
@@ -103,7 +108,7 @@ export function HallPanel({ config, savedConfig, activeButton, selectedButtons, 
           {travelReading.status === 'ready' && travel === null && <p className="meter-note meter-error">{t('Travel is unavailable until this channel has valid calibration.')}</p>}
         </div>
       </div>
-      <div className="hall-editor"><div className="selected-label">{t('EDITING')}{selectedButtons.length > 1 ? t('· {{count}} CHANNELS', { count: selectedButtons.length }) : ''}</div><h2>{activeButton.toUpperCase()} <span>· {HALL_LABELS[activeButton]}</span></h2><SettingSlider label={t('Actuation point')} value={hall.press} onChange={(value) => onChange(selectedButtons, { press: value })} />{hall.rapidTrigger && <SettingSlider label={t('Rapid Trigger Threshold')} value={hall.release} onChange={(value) => onChange(selectedButtons, { release: value })} />}{hall.rapidTrigger && <SettingNumber label={t('Rapid Trigger Noise Filter')} value={hall.noise} min={0} max={4095} onChange={(value) => onChange(selectedButtons, { noise: value })} />}<label className="toggle-row"><span><strong>{t('Rapid Trigger')}</strong><small>{t('Reset as soon as the key moves upward')}</small></span><input aria-label={t('Rapid Trigger')} type="checkbox" checked={hall.rapidTrigger} onChange={(event) => onChange(selectedButtons, { rapidTrigger: event.target.checked })} /><span className="toggle" /></label><button className="calibrate-button" onClick={onStartCalibration} disabled={!calibrationAvailable || calibrationStarting || calibrationBlocked}>{t(calibrationStarting ? 'Waiting for live read to finish...' : calibrationBlocked ? 'Reconnect device before calibrating' : 'Calibrate all Hall buttons')} <ChevronRight size={16} /></button>{!calibrationAvailable && <p className="calibration-unavailable">{t('Live calibration is disabled until firmware supports ADC29 voltage reads.')}</p>}{calibrationBlocked && <p className="calibration-unavailable">{t('Calibration is blocked because a live request timed out. Reconnect the controller first.')}</p>}</div>
+      <div className="hall-editor"><div className="selected-label">{t('EDITING')}{selectedButtons.length > 1 ? t('· {{count}} CHANNELS', { count: selectedButtons.length }) : ''}</div><h2>{activeButton.toUpperCase()} <span>· {HALL_LABELS[activeButton]}</span></h2><SettingSlider label={t('Actuation point')} value={hall.press} max={actuationMax} onChange={updateActuation} />{hall.rapidTrigger && <SettingSlider label={t('Rapid Trigger Threshold')} value={hall.release} onChange={(value) => onChange(selectedButtons, { release: value })} />}{hall.rapidTrigger && <SettingNumber label={t('Rapid Trigger Noise Filter')} value={hall.noise} min={0} max={4095} onChange={(value) => onChange(selectedButtons, { noise: value })} />}<label className="toggle-row"><span><strong>{t('Rapid Trigger')}</strong><small>{t('Reset as soon as the key moves upward')}</small></span><input aria-label={t('Rapid Trigger')} type="checkbox" checked={hall.rapidTrigger} onChange={(event) => onChange(selectedButtons, { rapidTrigger: event.target.checked })} /><span className="toggle" /></label><button className="calibrate-button" onClick={onStartCalibration} disabled={!calibrationAvailable || calibrationStarting || calibrationBlocked}>{t(calibrationStarting ? 'Waiting for live read to finish...' : calibrationBlocked ? 'Reconnect device before calibrating' : 'Calibrate all Hall buttons')} <ChevronRight size={16} /></button>{!calibrationAvailable && <p className="calibration-unavailable">{t('Live calibration is disabled until firmware supports ADC29 voltage reads.')}</p>}{calibrationBlocked && <p className="calibration-unavailable">{t('Calibration is blocked because a live request timed out. Reconnect the controller first.')}</p>}</div>
     </div>
     {calibrationPanel}
   </div>

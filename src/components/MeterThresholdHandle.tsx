@@ -9,11 +9,12 @@ interface MeterThresholdHandleProps {
   label: string
   className: string
   style: CSSProperties
+  max?: number
   onPreview: (value: number | null) => void
   onCommit: (value: number) => void
 }
 
-export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue, label, className, style, onPreview, onCommit }: MeterThresholdHandleProps) {
+export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue, label, className, style, max = 1.5, onPreview, onCommit }: MeterThresholdHandleProps) {
   const dragging = useRef<number | null>(null)
   const startValue = useRef(value)
   const pendingValue = useRef(value)
@@ -44,7 +45,8 @@ export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue
   function valueAt(clientX: number): number | null {
     const rect = trackRef.current?.getBoundingClientRect()
     if (!rect) return null
-    return meterClientXToMillimeters(clientX, rect.left, rect.width)
+    const nextValue = meterClientXToMillimeters(clientX, rect.left, rect.width)
+    return nextValue === null ? null : Math.min(max, nextValue)
   }
 
   function previewAt(clientX: number) {
@@ -88,9 +90,9 @@ export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     let nextValue: number | null = null
     if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextValue = Math.max(0.05, value - 0.05)
-    else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextValue = Math.min(1.5, value + 0.05)
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextValue = value + 0.05
     else if (event.key === 'Home') nextValue = 0.05
-    else if (event.key === 'End') nextValue = 1.5
+    else if (event.key === 'End') nextValue = max
     else if (event.key === 'Escape' && dragging.current !== null) {
       event.preventDefault()
       dragging.current = null
@@ -99,7 +101,7 @@ export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue
     }
     if (nextValue === null) return
     event.preventDefault()
-    const snapped = Number(nextValue.toFixed(2))
+    const snapped = Number(Math.max(0.05, Math.min(max, nextValue)).toFixed(2))
     if (snapped !== value) onCommit(snapped)
   }
 
@@ -110,7 +112,7 @@ export function MeterThresholdHandle({ trackRef, sessionKey, value, displayValue
     role="slider"
     aria-label={label}
     aria-valuemin={0.05}
-    aria-valuemax={1.5}
+    aria-valuemax={max}
     aria-valuenow={displayValue}
     aria-orientation="horizontal"
     aria-valuetext={`${displayValue.toFixed(2)} mm`}

@@ -1,13 +1,14 @@
 interface SettingSliderProps {
   label: string
   value: number
+  max?: number
   onChange: (value: number) => void
 }
 
-export function SettingSlider({ label, value, onChange }: SettingSliderProps) {
+export function SettingSlider({ label, value, max = 1.5, onChange }: SettingSliderProps) {
   return <div className="slider-field">
     <div className="slider-label"><label htmlFor={label}>{label}</label><output>{value.toFixed(2)} mm</output></div>
-    <input id={label} type="range" min="0.05" max="1.5" step="0.05" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    <input id={label} type="range" min="0.05" max={max} step="0.05" value={value} onChange={(event) => onChange(Math.min(max, Number(event.target.value)))} />
   </div>
 }
 
