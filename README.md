@@ -6,4 +6,4 @@ RapidJAM コントローラーのボタン割り当て、入力モード、磁�
 
 This is an unofficial community project, and all console, platform, and product names that appear in the tool or its documentation (such as Nintendo Switch, PlayStation, Xbox, and the various mini consoles) are trademarks of their respective owners and imply no affiliation with, or endorsement by, those owners.
 
-配布物のビルド方法は [DISTRIBUTION.md](DISTRIBUTION.md) を参照してください。
+使い方は [利用ガイド](docs/USER_GUIDE.ja.md)、配布物のビルド方法は [DISTRIBUTION.md](DISTRIBUTION.md) を参照してください。ライセンスは [MIT](LICENSE) です。
