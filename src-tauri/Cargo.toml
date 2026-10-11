@@ -1,6 +1,6 @@
 [package]
 name = "rapidjam-configurator"
-version = "0.5.2"
+version = "0.6.0"
 description = "RapidJAM controller configurator"
 authors = ["RapidJAM"]
 edition = "2021"

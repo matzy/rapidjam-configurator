@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from 'react'
+import { useRef, useState, type MouseEvent } from 'react'
 import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, Usb, Zap } from 'lucide-react'
 import { Action, DeviceConfig, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from './device'
 import { HALL_LABELS } from './config/constants'
@@ -12,6 +12,8 @@ import { CalibrationPanel as CalibrationPanelComponent, CalibrationWorkspace as 
 import { createTransport } from './transport/createTransport'
 import { useDeviceConfig } from './hooks/useDeviceConfig'
 import { useHallCalibration } from './hooks/useHallCalibration'
+import { useHallTravel } from './hooks/useHallTravel'
+import { HallLiveReadCoordinator, LiveHallReadTimeoutError } from './transport/HallLiveReadCoordinator'
 import { useLocale } from './useLocale'
 
 const transport: DeviceTransport = createTransport()
@@ -26,10 +28,16 @@ export function App() {
   const [activeButton, setActiveButton] = useState<HallChannel>('ch14')
   const [selectedHallButtons, setSelectedHallButtons] = useState<HallChannel[]>(['ch14'])
   const [section, setSection] = useState<'mapping' | 'hall'>('mapping')
+  const [hallLiveReads] = useState(() => new HallLiveReadCoordinator())
+  const [calibrationStarting, setCalibrationStarting] = useState(false)
+  const calibrationStartInFlight = useRef(false)
+  const calibrationStartToken = useRef(0)
+  const calibrationStartCancelRequested = useRef(false)
   const calibration = useHallCalibration(transport, setNotice)
   const { calibrationStage, calibrationResults, calibrationProgress } = { calibrationStage: calibration.stage, calibrationResults: calibration.results, calibrationProgress: calibration.progress }
 
   const activeHall = config.hall[activeButton]
+  const hallTravel = useHallTravel(transport, activeButton, section === 'hall' && calibrationStage === 'idle' && !busy && !connectionFailed && !restartComplete && device !== null && device.transport !== 'mock', hallLiveReads, activeHall)
 
   function selectHallButton(id: HallChannel, event?: MouseEvent<HTMLButtonElement>) {
     if (!event?.shiftKey && !event?.ctrlKey && !event?.metaKey) {
@@ -53,7 +61,45 @@ export function App() {
     setSelectedHallButtons(hallChannels)
   }
 
-  function startCalibration() { void calibration.startCalibration() }
+  async function startCalibration() {
+    if (calibrationStartInFlight.current || hallLiveReads.requiresReconnect) return
+    if (!transport.supportsLiveHallCalibration()) {
+      await calibration.startCalibration()
+      return
+    }
+    calibrationStartInFlight.current = true
+    calibrationStartCancelRequested.current = false
+    setCalibrationStarting(true)
+    const token = ++calibrationStartToken.current
+    try {
+      await hallLiveReads.pauseAndDrain()
+      if (token !== calibrationStartToken.current || section !== 'hall' || connectionFailed || restartComplete) {
+        hallLiveReads.resumeAfterCalibration()
+        return
+      }
+      await calibration.startCalibration()
+    } catch (error) {
+      if (error instanceof LiveHallReadTimeoutError) {
+        setNotice('Calibration is blocked because a live request timed out. Reconnect the controller first.')
+      } else {
+        setNotice('Unable to stop live Hall reading safely. Calibration was not started.')
+      }
+    } finally {
+      if (calibrationStartCancelRequested.current) {
+        await calibration.waitForCaptureDrain()
+        hallLiveReads.resumeAfterCalibration()
+      }
+      calibrationStartCancelRequested.current = false
+      calibrationStartInFlight.current = false
+      setCalibrationStarting(false)
+    }
+  }
+
+  async function reconnectDevice() {
+    calibrationStartToken.current += 1
+    const connected = await connect()
+    if (connected) hallLiveReads.resetAfterReconnect()
+  }
 
   async function applyCalibration() {
     if (!calibrationResults || busy) return
@@ -80,13 +126,19 @@ export function App() {
       const nextConfig = { ...config, hall: nextHall }
       await saveHallCalibration(patches, nextConfig)
       calibration.cancel()
+      hallLiveReads.resumeAfterCalibration()
     } catch (error) {
       setNotice('Calibration save failed')
     }
   }
 
   function cancelCalibration() {
+    calibrationStartToken.current += 1
+    if (calibrationStartInFlight.current) calibrationStartCancelRequested.current = true
     calibration.cancel()
+    if (!calibrationStartInFlight.current) {
+      void calibration.waitForCaptureDrain().then(() => hallLiveReads.resumeAfterCalibration())
+    }
     setNotice('Calibration cancelled')
   }
 
@@ -109,7 +161,7 @@ export function App() {
     {(connectionFailed || restartComplete) && <div className="connect-error-overlay">
       <div className="connect-error-card">
         {restartComplete ? <Check size={40} /> : <AlertTriangle size={40} />}
-        {restartComplete ? <><h2>{t('RapidJAM is restarting in gamepad mode')}</h2><p>{t('The configurator connection will close while RapidJAM returns to normal gamepad operation.')}</p></> : <><h2>{t('Cannot connect to RapidJAM')}</h2><p>{t('Check the USB connection and press Retry. Other controls are unavailable until the connection is restored.')}</p>{diagnostic && <code>{diagnostic}</code>}<button className="primary-button" onClick={() => void connect()} disabled={busy}>{t(busy ? 'Connecting...' : 'Retry')}</button></>}
+        {restartComplete ? <><h2>{t('RapidJAM is restarting in gamepad mode')}</h2><p>{t('The configurator connection will close while RapidJAM returns to normal gamepad operation.')}</p></> : <><h2>{t('Cannot connect to RapidJAM')}</h2><p>{t('Check the USB connection and press Retry. Other controls are unavailable until the connection is restored.')}</p>{diagnostic && <code>{diagnostic}</code>}<button className="primary-button" onClick={() => void reconnectDevice()} disabled={busy}>{t(busy ? 'Connecting...' : 'Retry')}</button></>}
       </div>
     </div>}
     <header className="topbar">
@@ -122,14 +174,14 @@ export function App() {
     <main className="workspace" inert={connectionFailed || restartComplete || undefined}>
       <aside className="sidebar">
         <div className="sidebar-heading">{t('CONFIGURATION')}</div>
-        <button className={`nav-item ${section === 'mapping' ? 'selected' : ''}`} onClick={() => setSection('mapping')}><Link2 size={17} /> {t('Button mapping')} <ChevronRight size={15} /></button>
+        <button className={`nav-item ${section === 'mapping' ? 'selected' : ''}`} onClick={() => { calibrationStartToken.current += 1; setSection('mapping') }}><Link2 size={17} /> {t('Button mapping')} <ChevronRight size={15} /></button>
         <button className={`nav-item ${section === 'hall' ? 'selected' : ''}`} onClick={() => setSection('hall')}><Zap size={17} /> {t('Magnetic switches')} <ChevronRight size={15} /></button>
-        <div className="sidebar-foot"><div className="connection-card"><Usb size={17} /><div><strong>{device ? t('RapidJAM connected') : t('Looking for device')}</strong><span>{device ? t(device.transport === 'tauri' ? 'WebConfig HTTP via desktop app' : device.transport === 'http' ? 'WebConfig HTTP via local proxy' : 'Mock transport') : t('Connect RapidJAM by USB')}</span></div></div><button className="text-button" onClick={() => void connect()} disabled={busy || restartComplete}>{t(busy ? 'Connecting...' : 'Reconnect device')}</button><button className="text-button" onClick={() => void restartToGamepad()} disabled={busy || connectionFailed || restartComplete}>{t('Restart in gamepad mode')}</button>{diagnostic && <details className="diagnostic"><summary>{t('Connection diagnostic')}</summary><code>{diagnostic}</code></details>}</div>
+        <div className="sidebar-foot"><div className="connection-card"><Usb size={17} /><div><strong>{device ? t('RapidJAM connected') : t('Looking for device')}</strong><span>{device ? t(device.transport === 'tauri' ? 'WebConfig HTTP via desktop app' : device.transport === 'http' ? 'WebConfig HTTP via local proxy' : 'Mock transport') : t('Connect RapidJAM by USB')}</span></div></div><button className="text-button" onClick={() => void reconnectDevice()} disabled={busy || restartComplete || calibrationStage !== 'idle' || calibrationStarting}>{t(busy ? 'Connecting...' : 'Reconnect device')}</button><button className="text-button" onClick={() => void restartToGamepad()} disabled={busy || connectionFailed || restartComplete || calibrationStage !== 'idle' || calibrationStarting}>{t('Restart in gamepad mode')}</button>{diagnostic && <details className="diagnostic"><summary>{t('Connection diagnostic')}</summary><code>{diagnostic}</code></details>}</div>
       </aside>
 
       <section className="content">
         <div className="content-heading"><div><p className="eyebrow">{t(section === 'mapping' ? 'INPUT LAYOUT' : 'MAGNETIC INPUT')}</p><h1>{t(section === 'mapping' ? 'Button mapping' : 'Magnetic switches')}</h1><p className="lede">{t(section === 'mapping' ? 'Tune every input for the way you play.' : 'Shape the exact moment each button responds.')}</p></div><div className="notice"><span className="notice-dot" />{t(notice)}</div></div>
-        {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} onInputModeChange={updateInputMode} onKeyboardMappingChange={updateKeyboardMapping} /> : <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} selectedButtons={selectedHallButtons} hall={activeHall} onSelect={selectHallButton} onSelectAll={selectAllHallButtons} onChange={updateHallMany} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} />}
+        {calibrationStage !== 'idle' && calibrationResults ? <CalibrationWorkspaceComponent config={config} savedConfig={savedConfig} stage={calibrationStage} results={calibrationResults} progress={calibrationProgress} onCircleClick={handleCalibrationCircle} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} /> : section === 'mapping' ? <MappingPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} onSelect={setActiveButton} onChange={updateMapping} onGpioChange={updateGpio} onInputModeChange={updateInputMode} onKeyboardMappingChange={updateKeyboardMapping} /> : <HallPanelComponent config={config} savedConfig={savedConfig} activeButton={activeButton} selectedButtons={selectedHallButtons} hall={activeHall} travelReading={hallTravel} isDemo={device?.transport === 'mock'} calibrationStarting={calibrationStarting} calibrationBlocked={hallLiveReads.requiresReconnect} onSelect={selectHallButton} onSelectAll={selectAllHallButtons} onChange={updateHallMany} calibrationAvailable={transport.supportsLiveHallCalibration()} onStartCalibration={startCalibration} calibrationPanel={<CalibrationPanelComponent stage={calibrationStage} results={calibrationResults} onFinish={calibration.finishCapture} onApply={applyCalibration} onCancel={cancelCalibration} />} />}
       </section>
     </main>
 

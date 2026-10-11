@@ -1,8 +1,22 @@
 export const rawToMillimeters = (value: number, idle: number, pressed: number): number =>
   Math.max(0.05, Math.min(1.5, Math.abs(value - idle) / Math.max(1, Math.abs(pressed - idle)) * 1.5))
 
+export const rawToTravelMillimeters = (value: number, idle: number, pressed: number, calibrated: boolean): number | null => {
+  if (!calibrated || !Number.isFinite(value) || !Number.isFinite(idle) || !Number.isFinite(pressed)) return null
+  const span = pressed - idle
+  if (Math.abs(span) < 1) return null
+  return Math.max(0, Math.min(1.5, (value - idle) / span * 1.5))
+}
+
 export const millimetersToRaw = (value: number, idle: number, pressed: number): number =>
   Math.round(idle + (Math.max(0, Math.min(1.5, value)) / 1.5) * (pressed - idle))
+
+export const meterClientXToMillimeters = (clientX: number, left: number, width: number): number | null => {
+  if (![clientX, left, width].every(Number.isFinite) || width <= 0) return null
+  const ratio = Math.max(0, Math.min(1, (clientX - left) / width))
+  const snapped = Math.round((ratio * 1.5) / 0.05) * 0.05
+  return Math.max(0.05, Math.min(1.5, Number(snapped.toFixed(2))))
+}
 
 export const secondLowest = (values: number[]): number => {
   if (values.length < 3) throw new Error('At least three values are required')

@@ -69,7 +69,7 @@
 1. [x] Add selectable `HttpTransport` for a real RapidJAM at `http://192.168.7.1`. Use `?transport=http` in the app URL.
 2. [x] Implement `getPinMappings` and `setPinMappings` mapping between GP2040-CE JSON and the app's GP0-GP5 model.
 3. [x] Implement `getHETriggerCalibrations` and `setHETriggerCalibrations` mapping for CH0-CH15.
-4. [ ] Implement `getHETriggerVoltage` for live Hall signal display.
+4. [x] Add a read-only live Hall voltage request and display the selected channel's estimated travel with fixed actuation/release threshold markers. Physical-device verification remains below.
 5. [x] Add request logging, network error context, and a visible connection diagnostic for unreachable devices. More granular firmware/value errors remain.
 6. [ ] Verify save with a readback on physical hardware. The current GP2040 endpoints save immediately, so preview is local until commit.
 7. [x] Test with the physical RapidJAM in WebConfig/RNDIS mode through the VS Code browser. Firmware and Hall/GPIO reads succeeded.
@@ -95,6 +95,31 @@ The HTTP adapter currently preserves the API's raw Hall calibration values and c
 - [x] Apply valid results to the local draft only; durable storage remains `Save to device`.
 - [ ] Validate the full capture flow on physical RapidJAM. The configurator now retries ADC29 reads up to four times per channel; channels that still fail remain visible as errors instead of aborting the entire run.
 
+## Live Hall Travel Meter
+
+- [x] Convert live ADC voltage to estimated 0–1.5 mm travel using the channel's idle/pressed calibration values, including reversed polarity and invalid-calibration handling.
+- [x] Poll only the active channel while the magnetic-switch editor is open; use a single read-only request at a time. Screen, busy, and calibration state stop future polling; calibration entry additionally pauses the shared coordinator and waits for the active request to settle before device preparation begins.
+- [x] Keep the automatic-calibration retry path unchanged; live display does not call the calibration preparation endpoint or write device settings.
+- [x] Display live estimated travel separately from fixed actuation and RT threshold setting markers. Clearly label the markers as settings, not observed reset events; hide the unused release-point slider, marker, and legend when RT is off while retaining the stored release value.
+- [x] Show unavailable/error and demo-mode states without presenting mock idle values as hardware readings; document that only the active channel is shown during multi-selection.
+- [x] Add unit tests for polarity, endpoints, clamping, and invalid inputs; run `npm run test:hall-travel` and the production build.
+- [x] Add delayed-request tests proving that calibration preparation cannot proceed until the in-flight live read settles; block further reads during the wait.
+- [x] Fail closed after an 8-second live-read timeout and require a successful reconnect to resume live polling or calibration. The Tauri bridge's existing 8-second request timeout remains unchanged.
+- [x] Use a 200ms delay after each live-read response before polling again. A single transient read failure retains and labels the last successful value; show the red warning after six consecutive failures. A request timeout still fails immediately and requires reconnect.
+- [x] Cover transient failure, recovery, six consecutive failures, initial failures, and immediate timeout in state-transition tests.
+- [x] Match the firmware's strict noise-delta comparison, inclusive RT activation/release comparisons, RT-off strict active-point comparison, and 4095 ADC polarity inversion in WebConfig's Hall calibration simulator.
+- [x] Use the shared absolute-span ADC↔mm conversion for reverse-polarity channel configuration and test both polarities.
+- [ ] Compare WebConfig sampled ON/OFF, configurator estimate, and actual gamepad input on hardware. They are not expected to be bit-for-bit identical because the API exposes sampled voltage, not firmware `triggerActive`, and WebConfig smoothing/history differs.
+- [x] Hide the RT-off release-point control, meter marker, and legend because the current firmware ignores `release` when RT is disabled. Preserve each channel's stored release value when toggling RT or applying bulk edits.
+- [x] Add draggable actuation/RT threshold handles on the measured-travel meter. Preview while dragging, commit once on pointer release to the existing draft update path, and provide keyboard slider controls.
+- [x] Convert meter coordinates to the setting slider's 0.05–1.50 mm range in 0.05 mm increments; cancel active previews if the channel, selected channels, or RT visibility changes.
+- [x] Browser smoke test marker dragging, keyboard arrow changes, Escape cancellation, multi-selection propagation, and RT-off hide/RT-on restore without losing the prior threshold (Mock transport).
+- [ ] Browser/manual UI acceptance for overlapping handles, pointercancel, keyboard Home/End, and 960×700/1440×960 zoom/layout. Physical save/readback is still covered by existing hardware acceptance.
+- [ ] Verify polling cadence/load and the transient/persistent error display on physical RapidJAM over WebConfig and Tauri; adjust `POLL_INTERVAL_MS` if responsiveness or HTTP/device load warrants it.
+- [ ] UI acceptance: verify RT-off release controls and marker are absent in Japanese/English, RT-on threshold controls return with unchanged values, and toggling RT off across multiple selected channels does not overwrite their individual saved/draft release values.
+- [ ] Exercise the full UI cancellation and delayed-read transition in a browser/Tauri test, including cancellation during baseline setup. Unit tests cover coordinator ordering; browser-level lifecycle coverage is not automated yet.
+- [ ] Verify CH0–CH15 live travel, threshold markers, channel switching, failure/recovery, and no impact to calibration/save on physical RapidJAM with ADC29-capable firmware (WebConfig and/or Tauri). Hardware verification has not been performed as part of this change.
+
 ### Firmware prerequisite discovered
 
 The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty response when `getHETriggerVoltage` targets RapidJAM's ADC29, while the same endpoint works with ADC28. The GP2040-CE ADC upper-bound checks excluded the final valid ADC GPIO. The following firmware files now include the boundary fix; the RapidJAM firmware must be rebuilt and flashed before automatic calibration can work against ADC29:
@@ -106,6 +131,7 @@ The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty resp
 
 - The browser UI defaults to MockTransport; use `?transport=http` with the legacy local server for real hardware. The Tauri app selects the native HTTP bridge automatically.
 - `HttpTransport` has GP2040-CE JSON mappings for the configurator's supported fields; its multiple POST save operations are not transactional and require release-grade recovery/real-device tests.
+- The WebConfig ON/OFF preview and configurator Hall input indicator are estimates from ADC samples, not a readout of firmware `triggerActive`. Sampling interval, EMA, and previous-sample initialization differ from the sub-millisecond controller processing loop; treat exact transitions as candidates for real-device verification.
 - Hall position values are converted to ADC thresholds using per-channel idle/pressed calibration data.
 - Some GPIO choices without a supported GP2040-CE action mapping are rejected instead of silently written.
 - GPIO physical positions remain approximate and are not currently rendered as separate physical buttons.
@@ -115,10 +141,10 @@ The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty resp
 
 ### Design
 
-- `HallSetting.release` is the existing Rapid Trigger Threshold value sent as `triggers[i].release`. It remains the normal `Release point` control when Rapid Trigger is disabled and is relabeled `Rapid Trigger Threshold` when Rapid Trigger is enabled.
+- `HallSetting.release` is the existing Rapid Trigger Threshold value sent as `triggers[i].release`. The UI shows it as `Rapid Trigger Threshold` only while RT is enabled. With the currently supported firmware, it is hidden while RT is disabled because that firmware branch does not use `release` for input detection. Preserve the stored value; do not reset or bulk-copy it when toggling RT.
 - `HallSetting.noise` already round-trips unchanged through `HttpTransport` and `MockTransport`, but is not currently exposed in the RapidJAM UI.
 - `noise` is an ADC delta, not a position. The UI must edit it as a raw integer from 0 to 4095 and must not use the millimeter conversion used by `release`.
-- Both Rapid Trigger controls are shown only when Rapid Trigger is enabled. The existing `Release point` remains visible when it is disabled.
+- Both Rapid Trigger controls are shown only when Rapid Trigger is enabled. No release-point UI is currently shown while RT is disabled.
 
 ### TODO
 
@@ -127,6 +153,7 @@ The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty resp
 - [x] Preserve the existing HTTP/API mapping without firmware changes.
 - [x] Build and manually verify the RT-enabled and RT-disabled control sets.
 - [ ] Verify Noise Filter readback and save persistence on physical RapidJAM hardware.
+- [ ] Consider re-exposing a release-point control/marker for RT-off only after a firmware version that actually applies release while RT is off is identified, compatibility is detectable, and behavior is verified on hardware. Until then keep the RT-off UI hidden and retain stored values.
 
 ## Tauri Desktop Migration (Windows x64)
 

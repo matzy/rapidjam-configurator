@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { millimetersToRaw, rawToMillimeters } from './utils/calibrationMath'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
@@ -77,6 +78,7 @@ export interface DeviceTransport {
   supportsLiveHallCalibration(): boolean
   prepareHallCalibration(): Promise<void>
   readHallVoltage(channel: number, onAttempt?: (attempt: number) => void): Promise<number>
+  readHallVoltageLive(channel: number): Promise<number>
   previewConfig(config: DeviceConfig): Promise<void>
   commitConfig(config: DeviceConfig): Promise<void>
   saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void>
@@ -119,8 +121,6 @@ const actionFromGpioValue = (value: number): GpioAssignment => {
   return entry[0] as GpioAssignment
 }
 
-const rawToMillimeters = (value: number, idle: number, pressed: number): number => Math.max(0.05, Math.min(1.5, ((value - idle) / Math.max(1, pressed - idle)) * 1.5))
-const millimetersToRaw = (value: number, idle: number, pressed: number): number => Math.round(idle + (Math.max(0, Math.min(1.5, value)) / 1.5) * (pressed - idle))
 const calibrationWait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
 const jsonBoolean = (value: unknown): boolean => value === true || value === 1 || value === '1'
 
@@ -157,6 +157,7 @@ export class MockTransport implements DeviceTransport {
   supportsLiveHallCalibration(): boolean { return true }
   async prepareHallCalibration(): Promise<void> {}
   async readHallVoltage(channel: number): Promise<number> { return this.config.hall[`ch${channel}` as HallChannel].idle }
+  async readHallVoltageLive(channel: number): Promise<number> { return this.config.hall[`ch${channel}` as HallChannel].idle }
   async previewConfig(config: DeviceConfig): Promise<void> { this.preview = cloneConfig(config) }
   async commitConfig(config: DeviceConfig): Promise<void> { this.config = cloneConfig(config); this.preview = null }
   async saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void> {
@@ -308,6 +309,33 @@ export class HttpTransport implements DeviceTransport {
       }
     }
     throw new Error(`CH${channel} voltage read failed after 30 attempts: ${lastError?.message ?? 'unknown error'}`)
+  }
+
+  async readHallVoltageLive(channel: number): Promise<number> {
+    const controller = this.useTauri ? undefined : new AbortController()
+    let timedOut = false
+    const timeout = controller ? setTimeout(() => { timedOut = true; controller.abort() }, 8000) : undefined
+    try {
+      const result = await this.request<{ voltage?: number, error?: string }>('/api/getHETriggerVoltage', {
+        method: 'POST',
+        body: JSON.stringify({ targetId: channel }),
+        ...(controller ? { signal: controller.signal } : {}),
+      })
+      if (typeof result.voltage !== 'number' || !Number.isFinite(result.voltage)) {
+        throw new Error(result.error ?? `No voltage returned for CH${channel}`)
+      }
+      return result.voltage
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      if (timedOut || /timed?\s*out|timeout/i.test(detail)) {
+        const timeoutError = new Error('Live Hall voltage read timed out; reconnect before starting calibration')
+        timeoutError.name = 'LiveHallReadTimeoutError'
+        throw timeoutError
+      }
+      throw error
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout)
+    }
   }
 
   async previewConfig(): Promise<void> {}

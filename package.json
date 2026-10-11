@@ -1,7 +1,7 @@
 {
   "name": "rapidjam-configurator",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev:setup": "node scripts/configure-worktree.mjs",
@@ -15,7 +15,8 @@
     "tauri:dev": "node scripts/prepare-tauri-dev.mjs && tauri dev --config src-tauri/tauri.dev.local.conf.json",
     "tauri:build": "tauri build",
     "release:check": "node scripts/check-release-metadata.mjs .",
-    "test:dev-config": "node --test scripts/dev-config.test.mjs"
+    "test:dev-config": "node --test scripts/dev-config.test.mjs",
+    "test:hall-travel": "node --experimental-strip-types --test tests/calibrationMath.test.ts tests/hallInputEstimate.test.ts tests/hallLiveReadCoordinator.test.ts tests/liveReadingState.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",
