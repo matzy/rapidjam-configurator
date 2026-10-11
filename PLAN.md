@@ -120,6 +120,19 @@ The HTTP adapter currently preserves the API's raw Hall calibration values and c
 - [ ] Exercise the full UI cancellation and delayed-read transition in a browser/Tauri test, including cancellation during baseline setup. Unit tests cover coordinator ordering; browser-level lifecycle coverage is not automated yet.
 - [ ] Verify CH0–CH15 live travel, threshold markers, channel switching, failure/recovery, and no impact to calibration/save on physical RapidJAM with ADC29-capable firmware (WebConfig and/or Tauri). Hardware verification has not been performed as part of this change.
 
+## Adjustable Hall Stroke Length
+
+- [x] Read `boardConfig` and `boardConfigLabel` from the existing `/api/getFirmwareVersion` response; the RapidJAM profile uses a 1.5 mm full stroke.
+- [x] Store per-board manual stroke overrides in app localStorage (0.5–4.0 mm in 0.1 mm steps); use a temporary 1.5 mm fallback and warning for unknown devices.
+- [x] Store actuation and Rapid Trigger thresholds as ratios of calibrated ADC travel, converting to mm only in the UI. Changing the full stroke changes displayed mm values but does not change ADC thresholds or device dirty state.
+- [x] Make live meter scale, threshold controls, pointer/keyboard limits, and accessibility values follow the configured full stroke.
+- [x] Test ratio/raw conversion, 1.5 mm and 4.0 mm display conversion, profile selection, and localStorage override resolution.
+- [x] In Standard mode hide the stroke editor for recognized RapidJAM; for unsupported/unknown devices use the 1.5 mm fallback and show an Expert mode notice. In Expert mode show the per-device editor and honor saved overrides.
+- [x] Keep Standard actuation capped at 1.30 mm; Expert actuation and RT threshold controls follow the configured full stroke up to 4.0 mm.
+- [x] Add `?mockBoard=<boardConfig>` to switch the mock board identity for UI verification; omit it for the RapidJAM mock.
+- [ ] Verify `boardConfig` from `/api/getFirmwareVersion` on released RapidJAM firmware and confirm localStorage behavior in the packaged Tauri app.
+- [ ] Browser/manual acceptance: check Standard/RapidJAM, Standard/unknown, and Expert mode; edit/reset the full stroke and verify mm values scale while dirty state and raw thresholds remain unchanged.
+
 ### Firmware prerequisite discovered
 
 The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty response when `getHETriggerVoltage` targets RapidJAM's ADC29, while the same endpoint works with ADC28. The GP2040-CE ADC upper-bound checks excluded the final valid ADC GPIO. The following firmware files now include the boundary fix; the RapidJAM firmware must be rebuilt and flashed before automatic calibration can work against ADC29:

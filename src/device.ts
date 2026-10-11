@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { millimetersToRaw, rawToMillimeters } from './utils/calibrationMath'
+import { rawToRatio, ratioToRaw } from './utils/calibrationMath'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
@@ -43,8 +43,8 @@ export interface HallSetting {
   threshold: number
   noise: number
   polarity: 'N' | 'P'
-  press: number
-  release: number
+  pressRatio: number
+  releaseRatio: number
   rapidTrigger: boolean
   calibrated: boolean
 }
@@ -69,6 +69,8 @@ export interface DeviceInfo {
   product: string
   firmware: string
   transport: 'mock' | 'http' | 'tauri'
+  boardConfig?: string
+  boardConfigLabel?: string
 }
 
 export interface DeviceTransport {
@@ -93,14 +95,14 @@ const hallMappings: Record<HallChannel, Action> = {
   ch8: 'LEFT', ch9: 'DOWN', ch10: 'L3', ch11: 'UP', ch12: 'RIGHT', ch13: 'S2', ch14: 'B1', ch15: 'R3',
 }
 const gpioMappings: Record<GpioPin, GpioAssignment> = { gp0: 'S2', gp1: 'A1', gp2: 'MENU_DOWN', gp3: 'MENU_SELECT', gp4: 'MENU_BACK', gp5: 'FN' }
-const defaultHallSetting = (channel: number): HallSetting => ({ idle: 2350, active: channel === 13 ? 2700 : 2450, pressed: 3100, threshold: 2800, noise: 30, polarity: 'N', press: 0.3, release: 0.8, rapidTrigger: true, calibrated: true })
+const defaultHallSetting = (): HallSetting => ({ idle: 2350, active: 2500, pressed: 3100, threshold: 2750, noise: 30, polarity: 'N', pressRatio: rawToRatio(2500, 2350, 3100), releaseRatio: rawToRatio(2750, 2350, 3100), rapidTrigger: true, calibrated: true })
 const keyboardActions: KeyboardAction[] = ['Up', 'Down', 'Left', 'Right', 'B1', 'B2', 'B3', 'B4', 'L1', 'R1', 'L2', 'R2', 'S1', 'S2', 'L3', 'R3', 'A1', 'A2', 'A3', 'A4', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12']
 const defaultKeyboardMappings = Object.fromEntries(keyboardActions.map((action) => [action, ({ Up: 26, Down: 22, Left: 4, Right: 7, B1: 11, B2: 13, B3: 28, B4: 24, L1: 18, R1: 15, L2: 12, R2: 14, S1: 42, S2: 40 } as Record<string, number>)[action] ?? 0])) as KeyboardMappings
 
 export const defaultConfig: DeviceConfig = {
   hallMappings,
   gpioMappings,
-  hall: Object.fromEntries(hallChannels.map((id, index) => [id, defaultHallSetting(index)])) as Record<HallChannel, HallSetting>,
+  hall: Object.fromEntries(hallChannels.map((id) => [id, defaultHallSetting()])) as Record<HallChannel, HallSetting>,
   inputMode: { inputMode: 0, inputDeviceType: 0, ps4AuthType: 0, ps5AuthType: 0, xinputAuthType: 0, ps4ControllerIDMode: 0, switchTpShareForDs4: false, usbDescOverride: false, usbDescProduct: '', usbDescManufacturer: '', usbDescVersion: '', usbOverrideID: false, usbVendorID: '0000', usbProductID: '0000' },
   keyboardMappings: defaultKeyboardMappings,
 }
@@ -147,9 +149,18 @@ export class MockTransport implements DeviceTransport {
   private config = cloneConfig(defaultConfig)
   private preview: DeviceConfig | null = null
 
+  constructor(private readonly boardConfig = 'RapidJAM') {}
+
   async connect(): Promise<DeviceInfo> {
     await new Promise((resolve) => setTimeout(resolve, 350))
-    return { product: 'RapidJAM prototype', firmware: 'GP2040-CE 0.7.10', transport: 'mock' }
+    const isRapidJAM = this.boardConfig.toLowerCase() === 'rapidjam'
+    return {
+      product: isRapidJAM ? 'RapidJAM prototype' : this.boardConfig,
+      firmware: 'GP2040-CE 0.7.10',
+      transport: 'mock',
+      boardConfig: this.boardConfig,
+      boardConfigLabel: isRapidJAM ? 'Rapid JAM' : this.boardConfig,
+    }
   }
 
   async restartToGamepad(): Promise<void> {}
@@ -167,8 +178,8 @@ export class MockTransport implements DeviceTransport {
       this.config.hall[id as HallChannel] = {
         ...current,
         ...patch,
-        press: rawToMillimeters(patch.active, patch.idle, patch.pressed),
-        release: rawToMillimeters(patch.threshold, patch.idle, patch.pressed),
+        pressRatio: rawToRatio(patch.active, patch.idle, patch.pressed),
+        releaseRatio: rawToRatio(patch.threshold, patch.idle, patch.pressed),
         calibrated: patch.idle !== patch.pressed,
       }
     })
@@ -213,8 +224,14 @@ export class HttpTransport implements DeviceTransport {
   }
 
   async connect(): Promise<DeviceInfo> {
-    const version = await this.request<{ version?: string }>('/api/getFirmwareVersion')
-    return { product: 'RapidJAM', firmware: version.version ?? 'GP2040-CE', transport: this.useTauri ? 'tauri' : 'http' }
+    const version = await this.request<{ version?: string, boardConfig?: string, boardConfigLabel?: string }>('/api/getFirmwareVersion')
+    return {
+      product: version.boardConfigLabel ?? version.boardConfig ?? 'Unknown device',
+      firmware: version.version ?? 'GP2040-CE',
+      transport: this.useTauri ? 'tauri' : 'http',
+      boardConfig: version.boardConfig,
+      boardConfigLabel: version.boardConfigLabel,
+    }
   }
 
   async restartToGamepad(): Promise<void> {
@@ -247,8 +264,8 @@ export class HttpTransport implements DeviceTransport {
         threshold: trigger.release,
         noise: trigger.noise,
         polarity: trigger.is_polarized ? 'P' : 'N',
-        press: rawToMillimeters(trigger.active, trigger.idle, trigger.pressed),
-        release: rawToMillimeters(trigger.release, trigger.idle, trigger.pressed),
+        pressRatio: rawToRatio(trigger.active, trigger.idle, trigger.pressed),
+        releaseRatio: rawToRatio(trigger.release, trigger.idle, trigger.pressed),
         rapidTrigger: Boolean(trigger.rapidTrigger),
         calibrated: trigger.idle !== trigger.pressed,
       }
@@ -361,10 +378,10 @@ export class HttpTransport implements DeviceTransport {
         ...existing,
         action: gpioActionValues[config.hallMappings[id]],
         idle: setting.idle,
-        active: millimetersToRaw(setting.press, setting.idle, setting.pressed),
+        active: ratioToRaw(setting.pressRatio, setting.idle, setting.pressed),
         pressed: setting.pressed,
         is_polarized: setting.polarity === 'P' ? 1 : 0,
-        release: millimetersToRaw(setting.release, setting.idle, setting.pressed),
+        release: ratioToRaw(setting.releaseRatio, setting.idle, setting.pressed),
         noise: setting.noise,
         rapidTrigger: setting.rapidTrigger ? 1 : 0,
       }
