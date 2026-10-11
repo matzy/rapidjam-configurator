@@ -1,4 +1,4 @@
-:root { font-family: 'Segoe UI', sans-serif; color: #e6ece9; background: #12181b; font-synthesis: none; --bg: #12181b; --panel: #1a2326; --panel-hi: #202c2f; --line: #334044; --muted: #8b9a9b; --green: #b7f24b; --green-dim: #607d32; --orange: #ee9b4d; --actionbar-height: 68px; }
+:root { font-family: 'Segoe UI', sans-serif; color: #e6ece9; background: #12181b; font-synthesis: none; --bg: #12181b; --panel: #1a2326; --panel-hi: #202c2f; --line: #334044; --muted: #8b9a9b; --green: #b7f24b; --green-dim: #607d32; --orange: #ee9b4d; --hardware-engraving-opacity: .08; --actionbar-height: 68px; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 960px; min-height: 100vh; background: radial-gradient(circle at 70% 0%, #203238 0, transparent 38%), var(--bg); }
 button, select, input { font: inherit; }
@@ -26,8 +26,11 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 /* Approximate physical layout until the vendor CAD coordinates are available. */
 .button-grid { position: relative; display: block; height: 100%; }
-.controller-key { position: absolute; width: 11%; height: auto; aspect-ratio: 1; margin: 0; padding: 2px; border-radius: 50%; }
+.controller-key { position: absolute; width: 11%; height: auto; aspect-ratio: 1; margin: 0; padding: 2px; overflow: visible; border-radius: 50%; }
 .controller-key span { font-size: 10px; font-weight: 700; }
+.controller-key .hardware-label { position: absolute; z-index: 0; inset: 0; display: grid; place-items: center; color: currentColor; font-size: clamp(16px, 3.2vw, 29px); font-weight: 800; line-height: 1; opacity: var(--hardware-engraving-opacity); pointer-events: none; text-shadow: 0 1px 1px rgba(255,255,255,.3), 0 -1px 1px rgba(0,0,0,.5); transform: translateY(-40%); }
+.controller-key .hardware-label-arrow svg { width: 76%; height: 76%; stroke-width: 2.5; filter: drop-shadow(0 1px rgba(255,255,255,.3)) drop-shadow(0 -1px rgba(0,0,0,.5)); }
+.controller-key .controller-function-label { position: relative; z-index: 1; }
 .controller-key small { max-width: 100%; overflow: hidden; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
 .controller-key.changed { color: #182119; border-color: var(--orange); background: var(--orange); box-shadow: 0 0 0 3px rgba(238,155,77,.18); }
 .controller-key.changed:hover, .controller-key.changed.active { color: #182119; border-color: #f4bd82; background: #f4bd82; }

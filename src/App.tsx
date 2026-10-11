@@ -1,7 +1,6 @@
 import { useRef, useState, type MouseEvent } from 'react'
 import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, Usb, Zap } from 'lucide-react'
 import { Action, DeviceConfig, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from './device'
-import { HALL_LABELS } from './config/constants'
 import { rawToMillimeters, secondHighest, secondLowest } from './utils/calibrationMath'
 import type { CalibrationResults } from './types/calibration'
 import { ControllerDisplay as Controller } from './components/ControllerDisplay'
@@ -15,9 +14,9 @@ import { useHallCalibration } from './hooks/useHallCalibration'
 import { useHallTravel } from './hooks/useHallTravel'
 import { HallLiveReadCoordinator, LiveHallReadTimeoutError } from './transport/HallLiveReadCoordinator'
 import { useLocale } from './useLocale'
+import { ButtonLabelProvider } from './ButtonLabelProvider'
 
 const transport: DeviceTransport = createTransport()
-const hallLabels = HALL_LABELS
 const rawToMm = rawToMillimeters
 const hallChannels = Array.from({ length: 16 }, (_, index) => `ch${index}` as HallChannel)
 
@@ -157,7 +156,8 @@ export function App() {
     }
   }
 
-  return <div className="app-shell">
+  return <ButtonLabelProvider inputMode={config.inputMode.inputMode} swapTouchpadShare={config.inputMode.switchTpShareForDs4}>
+    <div className="app-shell">
     {(connectionFailed || restartComplete) && <div className="connect-error-overlay">
       <div className="connect-error-card">
         {restartComplete ? <Check size={40} /> : <AlertTriangle size={40} />}
@@ -186,6 +186,6 @@ export function App() {
     </main>
 
     <footer className="actionbar" inert={connectionFailed || restartComplete || undefined}><div className="draft-state">{dirty ? <><span className="draft-dot" />{t('Unsaved changes')}</> : <><Check size={15} />{t('All changes saved')}</>}<span className="separator" />{t(device?.transport === 'mock' ? 'Demo device' : 'RapidJAM')}</div><div className="actions"><button className="secondary-button" onClick={() => void discard()} disabled={!dirty || busy}><RotateCcw size={16} />{t('Discard')}</button><button className="primary-button" onClick={() => void save()} disabled={!dirty || busy}><Save size={16} />{t(busy ? 'Saving...' : 'Save to device')}</button></div></footer>
-  </div>
+    </div>
+  </ButtonLabelProvider>
 }
-
