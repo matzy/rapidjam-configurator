@@ -10,7 +10,7 @@ The full procedure is in [DISTRIBUTION.md](../../../DISTRIBUTION.md) under "Rele
 ## Checklist
 
 1. Confirm the version is bumped in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock`. Run `npm run release:check`.
-2. Write `docs/release-notes/v<version>.md` in English first, then Japanese. The workflow reads this file for the draft Release.
+2. Write `docs/release-notes/v<version>.md` in English first, then Japanese. The workflow reads this file for the draft Release. GitHub appends the auto-generated list of pull requests after it.
 3. Run the tests: `npm run test:*` (see `package.json`).
 4. Scan staged changes for personal or sensitive information before committing.
 5. Commit on the release branch. Push the branch, then create and push the tag `v<version>` on that commit.

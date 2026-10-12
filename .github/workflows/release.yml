@@ -117,4 +117,5 @@ jobs:
             --draft `
             --verify-tag `
             --title "RapidJAM Configurator $env:TAG" `
-            --notes-file "docs/release-notes/$env:TAG.md"
+            --notes-file "docs/release-notes/$env:TAG.md" `
+            --generate-notes

@@ -25,7 +25,9 @@ The Japanese user guide `docs/USER_GUIDE.ja.md` is copied into the archive by th
 
 1. Bump the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock`, then merge to the default branch. `npm run release:check` verifies these match.
 2. Create and push the tag `v<version>` (for example `v0.7.0`). The workflow stops if the tag does not match `package.json`.
-3. The workflow creates a **draft** GitHub Release with the ZIP and its `.sha256` file. The release notes are taken from `docs/release-notes/<tag>.md` (for example `docs/release-notes/v0.7.0.md`), so write that file before tagging. Review the notes and assets, then publish the draft manually. If a draft for that tag already exists, delete it before re-running.
+3. The workflow creates a **draft** GitHub Release with the ZIP and its `.sha256` file. The release notes are taken from `docs/release-notes/<tag>.md` (for example `docs/release-notes/v0.7.0.md`), so write that file before tagging. GitHub then appends the auto-generated section below it: merged pull requests grouped by `.github/release.yml` (Dependabot updates in their own section) and a Full Changelog link. Review the notes and assets, then publish the draft manually. If a draft for that tag already exists, delete it before re-running.
+
+`.github/workflows/pr-test.yml` runs the same test scripts on every pull request, so changes (including Dependabot updates) are checked before they are merged.
 
 The workflow runs `build-tauri-distribution.ps1`, so the ZIP built in CI has the same contents as a local build. The workflow can also create GitHub Artifact Attestations (build provenance) for the ZIP and the executable when the repository supports them.
 
