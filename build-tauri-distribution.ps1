@@ -14,12 +14,32 @@ $releaseName = "rapidjam-configurator-x64-$($appManifest.version)"
 $stagingDirectory = Join-Path $releaseRoot $releaseName
 $archivePath = Join-Path $releaseRoot "$releaseName.zip"
 $checksumPath = Join-Path $releaseRoot "$releaseName.zip.sha256"
+$auditDirectory = Join-Path $releaseRoot "$releaseName-audit"
 $targetDirectory = Join-Path $projectRoot 'src-tauri\target\x86_64-pc-windows-msvc\release'
 $executableName = 'rapidjam-configurator.exe'
 $cargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
 
 if ((Test-Path -LiteralPath (Join-Path $cargoBin 'cargo.exe')) -and -not (Get-Command cargo.exe -ErrorAction SilentlyContinue)) {
   $env:PATH = "$cargoBin;$env:PATH"
+}
+
+function Read-RequiredFile {
+  param([string]$Path)
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    throw "Required file is missing: $Path"
+  }
+  return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
+}
+
+function Write-WindowsText {
+  param([string]$Path, [string]$Text)
+  $crlfText = $Text -replace "`r?`n", "`r`n"
+  [System.IO.File]::WriteAllText($Path, $crlfText, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Get-Sha256 {
+  param([string]$Path)
+  return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
 try {
@@ -40,7 +60,7 @@ try {
   if ($cargoAboutVersion -ne 'cargo-about 0.9.2') {
     throw "cargo-about 0.9.2 is required for a reproducible release audit; found '$cargoAboutVersion'."
   }
-  if (((Test-Path -LiteralPath $archivePath) -or (Test-Path -LiteralPath $checksumPath)) -and -not $Force) {
+  if (((Test-Path -LiteralPath $archivePath) -or (Test-Path -LiteralPath $checksumPath) -or (Test-Path -LiteralPath $auditDirectory)) -and -not $Force) {
     throw "The versioned release already exists: $releaseName. Use -Force only when intentionally replacing this release."
   }
 
@@ -51,7 +71,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Release metadata check failed with exit code $LASTEXITCODE." }
 
     Write-Host 'Building the Windows x64 Tauri application...'
-    & npm.cmd run tauri:build -- --target x86_64-pc-windows-msvc --no-bundle
+    # The Tauri CLI writes informational lines to stderr; under Stop, Windows PowerShell turns them into terminating errors, so rely on the exit code instead.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      & npm.cmd run tauri:build -- --target x86_64-pc-windows-msvc --no-bundle
+    } finally {
+      $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ($LASTEXITCODE -ne 0) { throw "Tauri build failed with exit code $LASTEXITCODE." }
   } finally {
     Pop-Location
@@ -68,7 +95,11 @@ try {
   if (Test-Path -LiteralPath $stagingDirectory) {
     Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
   }
+  if (Test-Path -LiteralPath $auditDirectory) {
+    Remove-Item -LiteralPath $auditDirectory -Recurse -Force
+  }
   New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
+  New-Item -ItemType Directory -Path $auditDirectory -Force | Out-Null
   Copy-Item -LiteralPath $executablePath -Destination $stagingDirectory
 
   Get-ChildItem -LiteralPath $targetDirectory -Filter '*.dll' -File | ForEach-Object {
@@ -84,23 +115,23 @@ try {
   }
   Copy-Item -LiteralPath $webViewLoader -Destination $stagingDirectory -Force
 
-  $userGuidePath = Join-Path $projectRoot 'docs\USER_GUIDE.ja.md'
-  if (-not (Test-Path -LiteralPath $userGuidePath -PathType Leaf)) {
-    throw "Required Japanese end-user guide is missing: $userGuidePath"
-  }
-  Copy-Item -LiteralPath $userGuidePath -Destination $stagingDirectory -Force
-  $userGuideHash = (Get-FileHash -LiteralPath $userGuidePath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $userGuideJaPath = Join-Path $projectRoot 'docs\USER_GUIDE.ja.md'
+  Write-WindowsText (Join-Path $stagingDirectory 'USER_GUIDE.ja.md') (Read-RequiredFile $userGuideJaPath)
+  $userGuideEnPath = Join-Path $projectRoot 'docs\USER_GUIDE.en.md'
+  Write-WindowsText (Join-Path $stagingDirectory 'USER_GUIDE.en.md') (Read-RequiredFile $userGuideEnPath)
+  Write-WindowsText (Join-Path $stagingDirectory 'LICENSE.txt') (Read-RequiredFile (Join-Path $projectRoot 'LICENSE'))
+  Write-WindowsText (Join-Path $stagingDirectory 'README.txt') (Read-RequiredFile (Join-Path $projectRoot 'packaging\README.txt'))
 
-  $npmSbomPath = Join-Path $stagingDirectory 'npm-production-sbom.spdx.json'
+  $npmSbomPath = Join-Path $auditDirectory 'npm-production-sbom.spdx.json'
   & npm.cmd sbom --sbom-format=spdx --omit=dev | Set-Content -LiteralPath $npmSbomPath -Encoding utf8
   if ($LASTEXITCODE -ne 0) { throw "npm SBOM generation failed with exit code $LASTEXITCODE." }
 
-  $cargoSbomPath = Join-Path $stagingDirectory 'cargo-windows-x64-metadata.json'
+  $cargoSbomPath = Join-Path $auditDirectory 'cargo-windows-x64-metadata.json'
   & cargo.exe metadata --manifest-path (Join-Path $projectRoot 'src-tauri\Cargo.toml') --format-version 1 --locked --filter-platform x86_64-pc-windows-msvc |
     Set-Content -LiteralPath $cargoSbomPath -Encoding utf8
   if ($LASTEXITCODE -ne 0) { throw "Cargo metadata generation failed with exit code $LASTEXITCODE." }
 
-  $cargoNoticePath = Join-Path $stagingDirectory 'THIRD-PARTY-NOTICES-RUST-DRAFT.md'
+  $cargoNoticePath = Join-Path $releaseRoot "$releaseName.rust-notices.tmp.md"
   & cargo-about.exe generate `
     (Join-Path $projectRoot 'src-tauri\about.hbs') `
     --manifest-path (Join-Path $projectRoot 'src-tauri\Cargo.toml') `
@@ -109,30 +140,42 @@ try {
     --locked `
     --fail `
     --output-file $cargoNoticePath
-  if ($LASTEXITCODE -ne 0) { throw "Rust third-party notice draft generation failed with exit code $LASTEXITCODE." }
-  $cargoNoticeHash = (Get-FileHash -LiteralPath $cargoNoticePath -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($LASTEXITCODE -ne 0) { throw "Rust third-party notice generation failed with exit code $LASTEXITCODE." }
 
-  $npmNoticePath = Join-Path $stagingDirectory 'THIRD-PARTY-NOTICES-NPM.txt'
-  Copy-Item -LiteralPath (Join-Path $projectRoot 'THIRD-PARTY-NOTICES-NPM.txt') -Destination $npmNoticePath
-  $npmLicenseRoot = Join-Path $stagingDirectory 'THIRD-PARTY-LICENSES\npm'
   $npmLicenses = @(
-    @{ Source = 'node_modules\@tauri-apps\api\LICENSE-APACHE-2.0'; Target = 'tauri-api\LICENSE-APACHE-2.0' },
-    @{ Source = 'node_modules\@tauri-apps\api\LICENSE-MIT'; Target = 'tauri-api\LICENSE-MIT' },
-    @{ Source = 'node_modules\lucide-react\LICENSE'; Target = 'lucide-react\LICENSE' },
-    @{ Source = 'node_modules\react\LICENSE'; Target = 'react\LICENSE' },
-    @{ Source = 'node_modules\react-dom\LICENSE'; Target = 'react-dom\LICENSE' },
-    @{ Source = 'node_modules\scheduler\LICENSE'; Target = 'scheduler\LICENSE' }
+    @{ Source = 'node_modules\@tauri-apps\api\LICENSE-APACHE-2.0'; Name = 'tauri-api/LICENSE-APACHE-2.0' },
+    @{ Source = 'node_modules\@tauri-apps\api\LICENSE-MIT'; Name = 'tauri-api/LICENSE-MIT' },
+    @{ Source = 'node_modules\lucide-react\LICENSE'; Name = 'lucide-react/LICENSE' },
+    @{ Source = 'node_modules\react\LICENSE'; Name = 'react/LICENSE' },
+    @{ Source = 'node_modules\react-dom\LICENSE'; Name = 'react-dom/LICENSE' },
+    @{ Source = 'node_modules\scheduler\LICENSE'; Name = 'scheduler/LICENSE' }
   )
-  foreach ($license in $npmLicenses) {
-    $sourcePath = Join-Path $projectRoot $license.Source
-    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-      throw "Required third-party license file is missing: $sourcePath"
-    }
-    $targetPath = Join-Path $npmLicenseRoot $license.Target
-    New-Item -ItemType Directory -Path (Split-Path $targetPath -Parent) -Force | Out-Null
-    Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
+  $npmLicenseSections = foreach ($license in $npmLicenses) {
+    $licenseText = Read-RequiredFile (Join-Path $projectRoot $license.Source)
+    "----- $($license.Name) -----`r`n$($licenseText.TrimEnd())"
   }
-  $npmNoticeHash = (Get-FileHash -LiteralPath $npmNoticePath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+  $rustNoticeText = Read-RequiredFile $cargoNoticePath
+  $noticeText = @(
+    "RapidJAM Configurator $($appManifest.version) - third-party notices",
+    '',
+    'This file lists the third-party components included in RapidJAM Configurator.',
+    'RapidJAM Configurator itself is distributed under the MIT License (see LICENSE.txt).',
+    '',
+    (Read-RequiredFile (Join-Path $projectRoot 'THIRD-PARTY-NOTICES-NPM.txt')).TrimEnd(),
+    '',
+    '================================================================================',
+    'JavaScript license texts',
+    '================================================================================',
+    '',
+    ($npmLicenseSections -join "`r`n`r`n"),
+    '',
+    $rustNoticeText.TrimEnd(),
+    ''
+  ) -join "`r`n"
+  $thirdPartyNoticePath = Join-Path $stagingDirectory 'THIRD-PARTY-NOTICES.txt'
+  Write-WindowsText $thirdPartyNoticePath $noticeText
+  $thirdPartyNoticeHash = Get-Sha256 $thirdPartyNoticePath
 
   $gitCommit = 'unknown'
   $gitDirty = $true
@@ -156,24 +199,53 @@ try {
     firmwareCompatibility = $FirmwareCompatibility
     webView2Mode = 'Evergreen system runtime; runtime is not bundled'
     signingStatus = 'unsigned release candidate'
-    npmProductionSbomSha256 = (Get-FileHash -LiteralPath $npmSbomPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    cargoWindowsX64MetadataSha256 = (Get-FileHash -LiteralPath $cargoSbomPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    npmThirdPartyNoticeSha256 = $npmNoticeHash
-    cargoThirdPartyNoticeDraftSha256 = $cargoNoticeHash
-    japaneseUserGuideSha256 = $userGuideHash
-    thirdPartyNoticeStatus = 'automatically generated draft; review it against the shipped executable before each release'
+    executableSha256 = Get-Sha256 (Join-Path $stagingDirectory $executableName)
+    webView2LoaderSha256 = Get-Sha256 (Join-Path $stagingDirectory 'WebView2Loader.dll')
+    licenseSha256 = Get-Sha256 (Join-Path $stagingDirectory 'LICENSE.txt')
+    readmeSha256 = Get-Sha256 (Join-Path $stagingDirectory 'README.txt')
+    userGuideJaSha256 = Get-Sha256 (Join-Path $stagingDirectory 'USER_GUIDE.ja.md')
+    userGuideEnSha256 = Get-Sha256 (Join-Path $stagingDirectory 'USER_GUIDE.en.md')
+    thirdPartyNoticesSha256 = $thirdPartyNoticeHash
+    npmProductionSbomSha256 = Get-Sha256 $npmSbomPath
+    cargoWindowsX64MetadataSha256 = Get-Sha256 $cargoSbomPath
+    thirdPartyNoticeStatus = 'generated from the npm production SBOM and cargo-about; review against the shipped executable before each release'
   }
-  $manifestPath = Join-Path $stagingDirectory 'release-manifest.json'
+
+  if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }
+  Add-Type -AssemblyName System.IO.Compression
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $stagingRoot = $stagingDirectory.TrimEnd('\')
+  $archiveStream = [System.IO.File]::Open($archivePath, [System.IO.FileMode]::CreateNew)
+  try {
+    $archiveWriter = New-Object System.IO.Compression.ZipArchive($archiveStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+      # Entry names must use '/' separators; CreateFromDirectory writes '\' on .NET Framework.
+      Get-ChildItem -LiteralPath $stagingRoot -File -Recurse | ForEach-Object {
+        $relativePath = $_.FullName.Substring($stagingRoot.Length + 1).Replace('\', '/')
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archiveWriter, $_.FullName, "$releaseName/$relativePath", [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+      }
+    } finally {
+      $archiveWriter.Dispose()
+    }
+  } finally {
+    $archiveStream.Dispose()
+  }
+
+  $archiveHash = Get-Sha256 $archivePath
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
+  try {
+    $archiveContents = @($zip.Entries | Where-Object { -not $_.FullName.EndsWith('/') } | ForEach-Object { $_.FullName })
+  } finally {
+    $zip.Dispose()
+  }
+  $manifest['archiveSha256'] = $archiveHash
+  $manifest['archiveContents'] = $archiveContents
+
+  $manifestPath = Join-Path $auditDirectory 'release-manifest.json'
   $manifestJson = $manifest | ConvertTo-Json -Depth 8
   [System.IO.File]::WriteAllText($manifestPath, $manifestJson, [System.Text.UTF8Encoding]::new($false))
 
-  Copy-Item -LiteralPath (Join-Path $projectRoot 'DISTRIBUTION.md') -Destination $stagingDirectory
-
-  if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }
-  Compress-Archive -Path (Join-Path $stagingDirectory '*') -DestinationPath $archivePath -CompressionLevel Optimal
-
-  $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-  Set-Content -LiteralPath $checksumPath -Value "$hash  $releaseName.zip" -Encoding ascii
+  Set-Content -LiteralPath $checksumPath -Value "$archiveHash  $releaseName.zip" -Encoding ascii
   if ($env:GITHUB_OUTPUT) {
     $outputLines = @(
       "release_name=$releaseName",
@@ -184,9 +256,15 @@ try {
     [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, (($outputLines -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
   }
   Write-Host "Created: $archivePath" -ForegroundColor Green
-  Write-Host "SHA-256: $hash"
+  Write-Host "SHA-256: $archiveHash"
+  Write-Host "Audit files (keep locally, do not publish): $auditDirectory" -ForegroundColor Yellow
+  Write-Host 'Review THIRD-PARTY-NOTICES.txt against the shipped executable before release.' -ForegroundColor Yellow
 } finally {
   if (Test-Path -LiteralPath $stagingDirectory) {
     Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
+  }
+  $cargoNoticeTempPath = Join-Path $releaseRoot "$releaseName.rust-notices.tmp.md"
+  if (Test-Path -LiteralPath $cargoNoticeTempPath) {
+    Remove-Item -LiteralPath $cargoNoticeTempPath -Force
   }
 }
