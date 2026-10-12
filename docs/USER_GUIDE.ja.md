@@ -20,7 +20,7 @@ RapidJAM Configurator は、RapidJAM コントローラーのボタン割り当�
 1. ZIP を任意のフォルダーに展開し、`rapidjam-configurator.exe` を起動します。管理者権限は不要です。
 2. RapidJAM を WebConfig/RNDIS モードにして、USB で PC に接続します。
 3. 画面上部に RapidJAM の製品名とファームウェア情報が表示され、左下に「RapidJAM 接続中」と出れば接続できています。
-4. 接続できない場合は、画面に「RapidJAM に接続できません」と表示されます。USB 接続とモードを確認し、「再試行」を押してください。
+4. 接続できない場合は、画面に「RapidJAM に接続できません」と表示されます。USB 接続と WebConfig/RNDIS モードを確認し、「再試行」を押してください。
 
 接続後に左下の「デバイスに再接続」を押すと、設定を読み直せます。
 
