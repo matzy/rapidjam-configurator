@@ -66,12 +66,11 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .calibration-live-row { display: flex; align-items: stretch; gap: 14px; }
 .calibration-live-row .calibration-live-status { flex: 1; }
 .calibration-action-guide { flex: none; width: 96px; height: 77px; align-self: center; overflow: visible; }
-.guide-housing-top { fill: #1b2629; stroke: #4e5e60; stroke-width: 1; stroke-linejoin: round; }
-.guide-housing-front { fill: #111a1c; stroke: #4e5e60; stroke-width: 1; stroke-linejoin: round; }
-.guide-housing-side { fill: #0c1315; stroke: #4e5e60; stroke-width: 1; stroke-linejoin: round; }
-.guide-key-top { fill: #33464a; stroke: #6b7d7f; stroke-width: 1; stroke-linejoin: round; }
-.guide-key-front { fill: #26363a; stroke: #6b7d7f; stroke-width: 1; stroke-linejoin: round; }
-.guide-key-side { fill: #1d2a2d; stroke: #6b7d7f; stroke-width: 1; stroke-linejoin: round; }
+.guide-housing-wall { fill: #111a1c; stroke: #4e5e60; stroke-width: 1; stroke-linejoin: round; }
+.guide-housing-top { fill: #1b2629; stroke: #4e5e60; stroke-width: 1; }
+.guide-hole { fill: #0a1011; stroke: #4e5e60; stroke-width: 1; }
+.guide-key-wall { fill: #26363a; stroke: #6b7d7f; stroke-width: 1; stroke-linejoin: round; }
+.guide-key-top { fill: #3a4f54; stroke: #6b7d7f; stroke-width: 1; }
 .guide-arrow { fill: var(--orange); stroke: var(--orange); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .guide-release .guide-arrow { fill: var(--green); stroke: var(--green); }
 .guide-cross line { stroke: #ef9b91; stroke-width: 3; stroke-linecap: round; }
