@@ -1,0 +1,25 @@
+# Groups pull requests in the auto-generated part of release notes.
+# Dependabot pull requests use the "dependencies" label, so they get their own section.
+changelog:
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+      exclude:
+        labels:
+          - dependencies
+    - title: Fixes
+      labels:
+        - bug
+      exclude:
+        labels:
+          - dependencies
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Other Changes
+      labels:
+        - "*"
+      exclude:
+        labels:
+          - dependencies

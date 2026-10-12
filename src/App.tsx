@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { SelectModifiers } from './components/ControllerDisplay'
 import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, ShieldAlert, Usb, Zap } from 'lucide-react'
 import { Action, DeviceConfig, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from './device'
 import { rawToRatio, secondHighest, secondLowest } from './utils/calibrationMath'
@@ -63,7 +64,7 @@ export function App() {
     setExpertConfirmOpen(false)
   }
 
-  function selectHallButton(id: HallChannel, event?: MouseEvent<HTMLButtonElement>) {
+  function selectHallButton(id: HallChannel, event?: SelectModifiers) {
     if (!event?.shiftKey && !event?.ctrlKey && !event?.metaKey) {
       setSelectedHallButtons([id])
       setActiveButton(id)

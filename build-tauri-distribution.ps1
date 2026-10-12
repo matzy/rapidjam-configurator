@@ -71,7 +71,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Release metadata check failed with exit code $LASTEXITCODE." }
 
     Write-Host 'Building the Windows x64 Tauri application...'
-    & npm.cmd run tauri:build -- --target x86_64-pc-windows-msvc --no-bundle
+    # The Tauri CLI writes informational lines to stderr; under Stop, Windows PowerShell turns them into terminating errors, so rely on the exit code instead.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      & npm.cmd run tauri:build -- --target x86_64-pc-windows-msvc --no-bundle
+    } finally {
+      $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ($LASTEXITCODE -ne 0) { throw "Tauri build failed with exit code $LASTEXITCODE." }
   } finally {
     Pop-Location
@@ -239,6 +246,15 @@ try {
   [System.IO.File]::WriteAllText($manifestPath, $manifestJson, [System.Text.UTF8Encoding]::new($false))
 
   Set-Content -LiteralPath $checksumPath -Value "$archiveHash  $releaseName.zip" -Encoding ascii
+  if ($env:GITHUB_OUTPUT) {
+    $outputLines = @(
+      "release_name=$releaseName",
+      "archive_path=$archivePath",
+      "checksum_path=$checksumPath",
+      "executable_path=$executablePath"
+    )
+    [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, (($outputLines -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+  }
   Write-Host "Created: $archivePath" -ForegroundColor Green
   Write-Host "SHA-256: $archiveHash"
   Write-Host "Audit files (keep locally, do not publish): $auditDirectory" -ForegroundColor Yellow

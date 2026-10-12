@@ -18,7 +18,9 @@
     "test:dev-config": "node --test scripts/dev-config.test.mjs",
     "test:hall-travel": "node --experimental-strip-types --test tests/calibrationMath.test.ts tests/hallInputEstimate.test.ts tests/hallLiveReadCoordinator.test.ts tests/liveReadingState.test.ts tests/settingMode.test.ts tests/strokeProfiles.test.ts",
     "test:button-labels": "node --experimental-strip-types --test tests/buttonLabels.test.ts",
-    "test:hardware-labels": "node --experimental-strip-types --test tests/hardwareLabels.test.ts"
+    "test:hardware-labels": "node --experimental-strip-types --test tests/hardwareLabels.test.ts",
+    "test:button-face": "node --experimental-strip-types --test tests/buttonFaceTuning.test.ts tests/buttonFaceTuningValidation.test.ts",
+    "test:button-face-svg": "node --experimental-strip-types --test tests/buttonFaceSvg.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",

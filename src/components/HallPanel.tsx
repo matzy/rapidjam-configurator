@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { MouseEvent } from 'react'
+import type { SelectModifiers } from './ControllerDisplay'
 import { useRef, useState } from 'react'
 import type { DeviceConfig, HallChannel, HallSetting } from '../device'
 import { hardwareLabelText } from '../config/hardwareLabels'
@@ -29,7 +29,7 @@ interface HallPanelProps {
   isDemo: boolean
   calibrationStarting: boolean
   calibrationBlocked: boolean
-  onSelect: (id: HallChannel, event?: MouseEvent<HTMLButtonElement>) => void
+  onSelect: (id: HallChannel, event?: SelectModifiers) => void
   onSelectAll: () => void
   onChange: (buttons: ReadonlyArray<HallChannel>, patch: Partial<HallSetting>) => void
   calibrationAvailable: boolean
