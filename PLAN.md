@@ -89,7 +89,9 @@ The HTTP adapter currently preserves the API's raw Hall calibration values and c
 
 - [x] Add HTTP transport methods for per-channel voltage reads; calibration reapplies the known RapidJAM MUX setup and waits 1500ms for ADC settling.
 - [x] Add automatic all-channel idle sampling with up to 30 attempts per voltage read at 50ms intervals.
+- [x] Take five idle samples per channel (8 baseline rounds) and use the median as the idle value; take five pressed samples per channel at 100ms intervals and use the second-deepest value from idle as the pressed value, which works for both polarities and ignores a single spike.
 - [x] Add unordered full-press capture with automatic channel completion.
+- [x] Measure three press/release cycles per channel (up to five when the presses disagree, judged by a 8% spread limit). Each press uses the median of five samples, and the three presses' spread is checked against the idle-to-pressed span. Mark channels whose presses still disagree as `unstable`, and derive the idle value from the median of baseline and post-release idle samples. This addresses the level shift seen after releasing and re-pressing a button. Hardware validation is still pending.
 - [x] Add dedicated calibration progress view with physical layout, per-channel status, and collapsible raw result table.
 - [x] Add clickable failed channels for individual retry without rerunning successful channels.
 - [x] Apply valid results to the local draft only; durable storage remains `Save to device`.

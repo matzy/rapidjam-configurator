@@ -147,8 +147,10 @@ Calibration re-measures the idle position and the pressed position of each switc
 
 1. Select "Calibrate all Hall buttons".
 2. The idle-position measurement starts. Do not touch the controller's buttons while it runs.
-3. When the pressed-position measurement starts, press each button fully once, as you normally would. The order does not matter. Completed buttons turn green.
-   - Press a yellow button to skip it. Press a green button to measure it again.
+3. When the pressed-position measurement starts, press each button fully as you normally would, then release it. The order does not matter. When asked, press it again. This repeats about three times. The measured values are taken from these presses.
+   - If the presses do not agree closely, the configurator asks for up to five presses in total. A channel whose presses still disagree is marked "unstable" (orange). Check its result and measure it again if needed.
+   - If you release a button before it is fully pressed, only that press is repeated.
+   - Completed buttons turn green. Press a yellow button to skip it. Press a green button to measure it again.
    - A channel whose measurement failed can be selected from the status list and measured again.
 4. When all channels are done, select "Finish capture and review". Skipped channels are not calibrated.
 5. Review the results. Look for unusual values in the idle value, pressed value, span, and status. If something is wrong, press "Cancel" without applying.

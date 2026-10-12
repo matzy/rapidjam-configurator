@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DeviceTransport, HallChannel } from '../device'
 import type { CalibrationProgress, CalibrationResult, CalibrationResults, CalibrationStage } from '../types/calibration'
-import { CALIBRATION_BASELINE_ROUNDS, CALIBRATION_BASELINE_WAIT_MS, CALIBRATION_POLL_INTERVAL_MS, CALIBRATION_PRESS_THRESHOLD, CALIBRATION_SAMPLE_TARGET } from '../config/constants'
-import { secondHighest, secondLowest } from '../utils/calibrationMath'
+import { CALIBRATION_BASELINE_ROUNDS, CALIBRATION_BASELINE_WAIT_MS, CALIBRATION_FOCUS_TIMEOUT_MS, CALIBRATION_MAX_PRESS_CYCLES, CALIBRATION_POLL_INTERVAL_MS, CALIBRATION_PRESS_CYCLES, CALIBRATION_PRESS_SAMPLE_INTERVAL_MS, CALIBRATION_PRESS_SPREAD_LIMIT, CALIBRATION_PRESS_THRESHOLD, CALIBRATION_RELEASE_IDLE_SAMPLES, CALIBRATION_RELEASE_SETTLE_MS, CALIBRATION_SAMPLE_TARGET } from '../config/constants'
+import { median } from '../utils/calibrationMath'
+import { advancePressCycle, createPressCycleState, type PressCycleEvent, type PressCycleOptions, type PressCycleState } from '../utils/calibrationCapture'
 
 export interface HallCalibrationBuffers {
   baselines: number[]
-  peaks: number[]
-  pressSamples: number[][]
+  pressCycles: PressCycleState[]
   skipped: Set<HallChannel>
 }
 
@@ -36,10 +36,28 @@ export interface HallCalibrationState {
 
 const createBuffers = (): HallCalibrationBuffers => ({
   baselines: Array.from({ length: 16 }, () => 0),
-  peaks: Array.from({ length: 16 }, () => 0),
-  pressSamples: Array.from({ length: 16 }, () => []),
+  pressCycles: Array.from({ length: 16 }, () => createPressCycleState()),
   skipped: new Set<HallChannel>(),
 })
+
+const pressCycleOptions = (idle: number): PressCycleOptions => ({
+  idle,
+  threshold: CALIBRATION_PRESS_THRESHOLD,
+  sampleTarget: CALIBRATION_SAMPLE_TARGET,
+  releaseIdleSamples: CALIBRATION_RELEASE_IDLE_SAMPLES,
+  pressCycles: CALIBRATION_PRESS_CYCLES,
+  maxPressCycles: CALIBRATION_MAX_PRESS_CYCLES,
+  spreadLimit: CALIBRATION_PRESS_SPREAD_LIMIT,
+})
+
+const cyclePhaseLabel = (state: PressCycleState): string => {
+  if (state.outcome !== 'in-progress') return 'Button captured'
+  if (state.phase === 'press-sampling') return 'Hold the button down'
+  if (state.phase === 'await-release' || state.phase === 'idle-sampling') return 'Release the button'
+  return state.pressedCycles.length > 0 ? 'Press the button again' : 'Checking for button press'
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export function useHallCalibration(transport: DeviceTransport, setNotice: (message: string) => void): HallCalibrationState {
   const [stage, setStage] = useState<CalibrationStage>('idle')
@@ -73,15 +91,14 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
 
   function resetChannel(channel: HallChannel) {
     const index = Number(channel.slice(2))
-    buffersRef.current.pressSamples[index] = []
-    buffersRef.current.peaks[index] = buffersRef.current.baselines[index]
+    buffersRef.current.pressCycles[index] = createPressCycleState()
     buffersRef.current.skipped.delete(channel)
   }
 
   function remeasureFromReview(channel: HallChannel) {
     resetChannel(channel)
     cancelled.current = false
-    setResults((current) => current ? { ...current, [channel]: { ...current[channel], status: 'waiting', sampleCount: 0, pressed: null, error: undefined } } : current)
+    setResults((current) => current ? { ...current, [channel]: { ...current[channel], status: 'waiting', sampleCount: 0, pressCount: 0, pressTarget: CALIBRATION_PRESS_CYCLES, spreadPercent: null, pressed: null, polarity: null, error: undefined } } : current)
     setProgress((current) => ({ ...current, phase: 'Ready to re-measure channel', channel: Number(channel.slice(2)), attempt: 0, successful: 0 }))
     setStage('capture')
     setNotice('Ready to re-measure channel')
@@ -89,7 +106,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
 
   function isResolved(channel: number) {
     const id = `ch${channel}` as HallChannel
-    return buffersRef.current.pressSamples[channel].length >= CALIBRATION_SAMPLE_TARGET || buffersRef.current.skipped.has(id)
+    return buffersRef.current.pressCycles[channel].outcome !== 'in-progress' || buffersRef.current.skipped.has(id)
   }
 
   function allCaptureTargetsResolved() {
@@ -107,6 +124,23 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
 
   function updateResult(channel: number, patch: Partial<CalibrationResult>) {
     setResults((current) => current ? { ...current, [`ch${channel}`]: { ...current[`ch${channel}` as HallChannel], ...patch } } : current)
+  }
+
+  function publishChannel(channel: number, state: PressCycleState, latestVoltage: number) {
+    const idle = state.idle ?? buffersRef.current.baselines[channel]
+    const pressed = state.outcome === 'in-progress' ? null : state.pressed
+    const status = state.outcome === 'complete' ? 'complete' : state.outcome === 'unstable' ? 'unstable' : state.phase === 'press-sampling' ? 'pressing' : 'waiting'
+    updateResult(channel, {
+      idle,
+      pressed,
+      polarity: pressed === null ? null : pressed >= idle ? 'N' : 'P',
+      status,
+      pressCount: state.pressedCycles.length,
+      pressTarget: CALIBRATION_PRESS_CYCLES,
+      spreadPercent: state.spreadPercent,
+      latestVoltage,
+      error: undefined,
+    })
   }
 
   async function startCalibration() {
@@ -145,9 +179,8 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
         }
       }
       if (cancelled.current) return
-      buffersRef.current.baselines = samples.map((values) => values.length >= CALIBRATION_SAMPLE_TARGET ? secondLowest(values) : 0)
-      buffersRef.current.peaks = [...buffersRef.current.baselines]
-      setResults(Object.fromEntries(buffersRef.current.baselines.map((idle, channel) => [`ch${channel}`, samples[channel].length >= CALIBRATION_SAMPLE_TARGET ? { idle, pressed: null, polarity: null, status: 'waiting', sampleCount: samples[channel].length, latestVoltage: samples[channel][samples[channel].length - 1] } : { idle, pressed: null, polarity: null, status: 'error', sampleCount: samples[channel].length, latestVoltage: samples[channel][samples[channel].length - 1], error: baselineErrors[channel] ?? 'Fewer than three successful baseline samples' }])) as CalibrationResults)
+      buffersRef.current.baselines = samples.map((values) => values.length >= CALIBRATION_SAMPLE_TARGET ? median(values) : 0)
+      setResults(Object.fromEntries(buffersRef.current.baselines.map((idle, channel) => [`ch${channel}`, samples[channel].length >= CALIBRATION_SAMPLE_TARGET ? { idle, pressed: null, polarity: null, status: 'waiting', sampleCount: samples[channel].length, latestVoltage: samples[channel][samples[channel].length - 1] } : { idle, pressed: null, polarity: null, status: 'error', sampleCount: samples[channel].length, latestVoltage: samples[channel][samples[channel].length - 1], error: baselineErrors[channel] ?? 'Fewer than five successful baseline samples' }])) as CalibrationResults)
       setStage('capture')
       setProgress({ phase: 'Press phase ready', channel: null, attempt: 0, successful: 0, total: 16 })
       setNotice('Press each Hall button all the way as you normally would, in any order')
@@ -159,40 +192,46 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
   useEffect(() => {
     if (stage !== 'capture') return
     let stopped = false
+    const halted = () => stopped || cancelled.current
+    // Reads one voltage for the channel and advances its press-cycle state machine.
+    const readStep = async (channel: number): Promise<PressCycleEvent> => {
+      const value = await transport.readHallVoltage(channel, (attempt) => setProgress((current) => ({ ...current, attempt })))
+      if (halted()) return 'none'
+      const buffers = buffersRef.current
+      const step = advancePressCycle(buffers.pressCycles[channel], value, pressCycleOptions(buffers.baselines[channel]))
+      buffers.pressCycles[channel] = step.state
+      publishChannel(channel, step.state, value)
+      const captured = step.event === 'complete' || step.event === 'unstable'
+      setProgress((current) => ({ ...current, phase: cyclePhaseLabel(step.state), channel, attempt: 0, successful: current.successful + (captured ? 1 : 0) }))
+      return step.event
+    }
+    // Polls one channel until it resolves or stays quiet (no state change) for CALIBRATION_FOCUS_TIMEOUT_MS. Its state is kept when it returns.
+    const focusChannel = async (channel: number) => {
+      let quietSince = Date.now()
+      while (!halted() && !isResolved(channel) && Date.now() - quietSince < CALIBRATION_FOCUS_TIMEOUT_MS) {
+        await sleep(CALIBRATION_PRESS_SAMPLE_INTERVAL_MS)
+        if (halted()) return
+        let event: PressCycleEvent
+        try { event = await readStep(channel) } catch { continue }
+        if (halted()) return
+        if (event !== 'none') quietSince = Date.now()
+        if (event === 'released') await sleep(CALIBRATION_RELEASE_SETTLE_MS)
+      }
+    }
     const capture = async () => {
-      while (!stopped && !cancelled.current) {
-        for (let channel = 0; channel < 16 && !stopped; channel++) {
-          const id = `ch${channel}` as HallChannel
+      while (!halted()) {
+        for (let channel = 0; channel < 16 && !halted(); channel++) {
           if (isResolved(channel)) continue
-          setProgress((current) => ({ ...current, phase: 'Checking for button press', channel, attempt: 0 }))
-          let value: number
-          try { value = await transport.readHallVoltage(channel) } catch {
-            if (stopped || cancelled.current) return
-            await new Promise((resolve) => setTimeout(resolve, CALIBRATION_POLL_INTERVAL_MS))
+          let event: PressCycleEvent
+          try { event = await readStep(channel) } catch {
+            if (halted()) return
+            await sleep(CALIBRATION_POLL_INTERVAL_MS)
             continue
           }
-          if (stopped || cancelled.current) return
-          const idle = buffersRef.current.baselines[channel]
-          const previous = buffersRef.current.peaks[channel]
-          if (Math.abs(value - idle) > Math.abs(previous - idle)) buffersRef.current.peaks[channel] = value
-          if (Math.abs(buffersRef.current.peaks[channel] - idle) < CALIBRATION_PRESS_THRESHOLD) { await new Promise((resolve) => setTimeout(resolve, CALIBRATION_POLL_INTERVAL_MS)); continue }
-          updateResult(channel, { status: 'pressing', latestVoltage: value })
-          while (buffersRef.current.pressSamples[channel].length < CALIBRATION_SAMPLE_TARGET && !stopped && !cancelled.current) {
-            try {
-              const pressedValue = await transport.readHallVoltage(channel, (attempt) => { setProgress((current) => ({ ...current, phase: 'Reading pressed channel', channel, attempt })); updateResult(channel, { status: 'pressing', attempt }) })
-              if (stopped || cancelled.current) return
-              if (Math.abs(pressedValue - idle) < CALIBRATION_PRESS_THRESHOLD) { buffersRef.current.pressSamples[channel] = []; updateResult(channel, { status: 'waiting', sampleCount: 0, latestVoltage: pressedValue, error: 'Button released before three samples' }); break }
-              buffersRef.current.pressSamples[channel].push(pressedValue)
-              const samples = buffersRef.current.pressSamples[channel]
-              updateResult(channel, { status: 'waiting', sampleCount: samples.length, latestVoltage: pressedValue })
-              if (samples.length >= CALIBRATION_SAMPLE_TARGET) { const pressed = secondHighest(samples); updateResult(channel, { idle, pressed, polarity: pressed >= idle ? 'N' : 'P', status: 'complete', sampleCount: samples.length, latestVoltage: pressedValue }); setProgress((current) => ({ ...current, phase: 'Button captured', successful: current.successful + 1 })) } else await new Promise((resolve) => setTimeout(resolve, CALIBRATION_POLL_INTERVAL_MS))
-            } catch (error) {
-              if (stopped || cancelled.current) return
-              updateResult(channel, { status: 'error', error: error instanceof Error ? error.message : 'Voltage read failed' })
-              break
-            }
-          }
-          await new Promise((resolve) => setTimeout(resolve, CALIBRATION_POLL_INTERVAL_MS))
+          if (halted()) return
+          if (event !== 'none' && !isResolved(channel)) await focusChannel(channel)
+          if (halted()) return
+          await sleep(CALIBRATION_POLL_INTERVAL_MS)
           if (enterReviewIfResolved()) return
         }
         if (enterReviewIfResolved()) return
@@ -212,7 +251,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
     cancelled.current = false
     setStage('capture')
     setProgress({ phase: 'Ready to re-measure channel', channel: Number(channel.slice(2)), attempt: 0, successful: 0, total: 16 })
-    setResults((current) => current ? { ...current, [channel]: { ...current[channel], status: 'waiting', sampleCount: 0, pressed: null, error: undefined } } : current)
+    setResults((current) => current ? { ...current, [channel]: { ...current[channel], status: 'waiting', sampleCount: 0, pressCount: 0, pressTarget: CALIBRATION_PRESS_CYCLES, spreadPercent: null, pressed: null, polarity: null, error: undefined } } : current)
   }
 
   async function waitForCaptureDrain() {

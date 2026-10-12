@@ -26,12 +26,15 @@ export const meterClientXToMillimeters = (clientX: number, left: number, width: 
   return Math.max(POSITION_STEP_MM, Math.min(strokeMm, Number(snapped.toFixed(2))))
 }
 
-export const secondLowest = (values: number[]): number => {
-  if (values.length < 3) throw new Error('At least three values are required')
-  return [...values].sort((a, b) => a - b)[1]
+export const median = (values: number[]): number => {
+  if (values.length < 1) throw new Error('At least one value is required')
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2)
 }
 
-export const secondHighest = (values: number[]): number => {
-  if (values.length < 3) throw new Error('At least three values are required')
-  return [...values].sort((a, b) => b - a)[1]
+// Picks the second-deepest value by distance from idle, so polarity does not matter and one spike is ignored.
+export const secondDeepest = (values: number[], idle: number): number => {
+  if (values.length < 2) throw new Error('At least two values are required')
+  return [...values].sort((a, b) => Math.abs(b - idle) - Math.abs(a - idle))[1]
 }

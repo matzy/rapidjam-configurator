@@ -9,6 +9,9 @@ export type CalibrationResult = {
   status: 'preparing' | 'waiting' | 'pressing' | 'complete' | 'skipped' | 'unstable' | 'error'
   attempt?: number
   sampleCount?: number
+  pressCount?: number
+  pressTarget?: number
+  spreadPercent?: number | null
   latestVoltage?: number
   error?: string
 }
