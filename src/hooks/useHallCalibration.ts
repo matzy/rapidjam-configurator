@@ -3,7 +3,7 @@ import type { DeviceTransport, HallChannel } from '../device'
 import type { CalibrationProgress, CalibrationResult, CalibrationResults, CalibrationStage } from '../types/calibration'
 import { CALIBRATION_BASELINE_ROUNDS, CALIBRATION_BASELINE_WAIT_MS, CALIBRATION_FOCUS_TIMEOUT_MS, CALIBRATION_MAX_PRESS_CYCLES, CALIBRATION_POLL_INTERVAL_MS, CALIBRATION_PRESS_CYCLES, CALIBRATION_PRESS_SAMPLE_INTERVAL_MS, CALIBRATION_PRESS_SPREAD_LIMIT, CALIBRATION_PRESS_THRESHOLD, CALIBRATION_RELEASE_IDLE_SAMPLES, CALIBRATION_RELEASE_SETTLE_MS, CALIBRATION_SAMPLE_TARGET } from '../config/constants'
 import { median } from '../utils/calibrationMath'
-import { advancePressCycle, createPressCycleState, type PressCycleEvent, type PressCycleOptions, type PressCycleState } from '../utils/calibrationCapture'
+import { advancePressCycle, createPressCycleState, pressCycleAction, type PressCycleEvent, type PressCycleOptions, type PressCycleState } from '../utils/calibrationCapture'
 
 export interface HallCalibrationBuffers {
   baselines: number[]
@@ -62,11 +62,11 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 export function useHallCalibration(transport: DeviceTransport, setNotice: (message: string) => void): HallCalibrationState {
   const [stage, setStage] = useState<CalibrationStage>('idle')
   const [results, setResults] = useState<CalibrationResults | null>(null)
-  const [progress, setProgress] = useState<CalibrationProgress>({ phase: 'Idle', channel: null, attempt: 0, successful: 0, total: 16 })
+  const [progress, setProgress] = useState<CalibrationProgress>({ phase: 'Idle', channel: null, attempt: 0, successful: 0, total: 16, action: 'none' })
     function finishCapture(): void {
       cancelled.current = true
       setStage('review')
-      setProgress((current) => ({ ...current, phase: 'Review calibration results', channel: null, attempt: 0 }))
+      setProgress((current) => ({ ...current, phase: 'Review calibration results', channel: null, attempt: 0, action: 'none' }))
       setNotice('Review calibration results')
     }
   const buffersRef = useRef<HallCalibrationBuffers>(createBuffers())
@@ -78,7 +78,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
   function beginCapture() {
     cancelled.current = false
     setStage('capture')
-    setProgress((current) => ({ ...current, phase: 'Press phase ready', channel: null, attempt: 0 }))
+    setProgress((current) => ({ ...current, phase: 'Press phase ready', channel: null, attempt: 0, action: 'press' }))
   }
 
   function cancel() {
@@ -86,7 +86,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
     setStage('idle')
     setResults(null)
     buffersRef.current = createBuffers()
-    setProgress({ phase: 'Idle', channel: null, attempt: 0, successful: 0, total: 16 })
+    setProgress({ phase: 'Idle', channel: null, attempt: 0, successful: 0, total: 16, action: 'none' })
   }
 
   function resetChannel(channel: HallChannel) {
@@ -99,7 +99,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
     resetChannel(channel)
     cancelled.current = false
     setResults((current) => current ? { ...current, [channel]: { ...current[channel], status: 'waiting', sampleCount: 0, pressCount: 0, pressTarget: CALIBRATION_PRESS_CYCLES, spreadPercent: null, pressed: null, polarity: null, error: undefined } } : current)
-    setProgress((current) => ({ ...current, phase: 'Ready to re-measure channel', channel: Number(channel.slice(2)), attempt: 0, successful: 0 }))
+    setProgress((current) => ({ ...current, phase: 'Ready to re-measure channel', channel: Number(channel.slice(2)),     attempt: 0, successful: 0, action: 'press' }))
     setStage('capture')
     setNotice('Ready to re-measure channel')
   }
@@ -117,7 +117,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
     if (!allCaptureTargetsResolved()) return false
     cancelled.current = true
     setStage('review')
-    setProgress((current) => ({ ...current, phase: 'Review calibration results', channel: null, attempt: 0 }))
+    setProgress((current) => ({ ...current, phase: 'Review calibration results', channel: null, attempt: 0, action: 'none' }))
     setNotice('All Hall channels are complete. Review the results before applying them.')
     return true
   }
@@ -150,7 +150,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
     }
     cancelled.current = false
     buffersRef.current = createBuffers()
-    setProgress({ phase: 'Preparing device', channel: null, attempt: 0, successful: 0, total: 16 })
+    setProgress({ phase: 'Preparing device', channel: null, attempt: 0, successful: 0, total: 16, action: 'none' })
     setResults(Object.fromEntries(Array.from({ length: 16 }, (_, channel) => [`ch${channel}`, { idle: 0, pressed: null, polarity: null, status: 'preparing' }])) as CalibrationResults)
     setStage('baseline')
     setNotice('Leave all Hall buttons untouched while measuring idle values')
@@ -163,7 +163,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
         for (let channel = 0; channel < 16; channel++) {
           if (cancelled.current) return
           if (samples[channel].length >= CALIBRATION_SAMPLE_TARGET) continue
-          setProgress((current) => ({ ...current, phase: `Baseline sample ${round + 1} / ${CALIBRATION_BASELINE_ROUNDS}`, channel, attempt: 0 }))
+          setProgress((current) => ({ ...current, phase: `Baseline sample ${round + 1} / ${CALIBRATION_BASELINE_ROUNDS}`, channel, attempt: 0, action: 'hands-off' }))
           try {
             const voltage = await transport.readHallVoltage(channel, (attempt) => { setProgress((current) => ({ ...current, channel, attempt })); updateResult(channel, { status: 'waiting', attempt, sampleCount: samples[channel].length }) })
             if (cancelled.current) return
@@ -182,7 +182,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
       buffersRef.current.baselines = samples.map((values) => values.length >= CALIBRATION_SAMPLE_TARGET ? median(values) : 0)
       setResults(Object.fromEntries(buffersRef.current.baselines.map((idle, channel) => [`ch${channel}`, samples[channel].length >= CALIBRATION_SAMPLE_TARGET ? { idle, pressed: null, polarity: null, status: 'waiting', sampleCount: samples[channel].length, latestVoltage: samples[channel][samples[channel].length - 1] } : { idle, pressed: null, polarity: null, status: 'error', sampleCount: samples[channel].length, latestVoltage: samples[channel][samples[channel].length - 1], error: baselineErrors[channel] ?? 'Fewer than five successful baseline samples' }])) as CalibrationResults)
       setStage('capture')
-      setProgress({ phase: 'Press phase ready', channel: null, attempt: 0, successful: 0, total: 16 })
+      setProgress({ phase: 'Press phase ready', channel: null, attempt: 0, successful: 0, total: 16, action: 'press' })
       setNotice('Press each Hall button all the way as you normally would, in any order')
     } catch {
       if (!cancelled.current) { setStage('error'); setNotice('Calibration failed') }
@@ -202,7 +202,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
       buffers.pressCycles[channel] = step.state
       publishChannel(channel, step.state, value)
       const captured = step.event === 'complete' || step.event === 'unstable'
-      setProgress((current) => ({ ...current, phase: cyclePhaseLabel(step.state), channel, attempt: 0, successful: current.successful + (captured ? 1 : 0) }))
+      setProgress((current) => ({ ...current, phase: cyclePhaseLabel(step.state), channel, attempt: 0, action: pressCycleAction(step.state), successful: current.successful + (captured ? 1 : 0) }))
       return step.event
     }
     // Polls one channel until it resolves or stays quiet (no state change) for CALIBRATION_FOCUS_TIMEOUT_MS. Its state is kept when it returns.
@@ -250,7 +250,7 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
     resetChannel(channel)
     cancelled.current = false
     setStage('capture')
-    setProgress({ phase: 'Ready to re-measure channel', channel: Number(channel.slice(2)), attempt: 0, successful: 0, total: 16 })
+    setProgress({ phase: 'Ready to re-measure channel', channel: Number(channel.slice(2)), attempt: 0, successful: 0, total: 16, action: 'press' })
     setResults((current) => current ? { ...current, [channel]: { ...current[channel], status: 'waiting', sampleCount: 0, pressCount: 0, pressTarget: CALIBRATION_PRESS_CYCLES, spreadPercent: null, pressed: null, polarity: null, error: undefined } } : current)
   }
 

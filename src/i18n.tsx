@@ -145,6 +145,7 @@ const japanese: Record<string, string> = {
   'AUTOMATIC CALIBRATION': '自動校正', 'Leave all Hall buttons untouched. The configurator is sampling every channel automatically.': '磁気スイッチに触れないでください。設定アプリが各チャンネルを自動測定しています。',
   'Press each button fully, release it, and press again when asked. Any order is fine.': '順番は自由です。各ボタンを押し切ってから離し、指示があったら押し直してください。',
   'Press all the way as you normally do, then release. Press again when asked. Presses repeat until the readings agree.': '普段ボタンを押す感じで押し切ってから離してください。指示があったら押し直してください。測定値がそろうまで押し直しを繰り返します。',
+  'Do not touch the button': 'ボタンに触れないでください', 'Press the button all the way down': 'ボタンを奥まで押し切ってください',
   'Calibration results saved to RapidJAM': '校正結果を RapidJAM に保存しました',
   'No completed calibration results to apply': '反映できる校正結果がありません', 'Calibration failed': '校正に失敗しました', 'Calibration save failed': '校正結果を保存できませんでした', 'Calibration cancelled': '校正をキャンセルしました',
   'RapidJAM is ready for re-measurement': 'RapidJAM は再測定の準備ができました',

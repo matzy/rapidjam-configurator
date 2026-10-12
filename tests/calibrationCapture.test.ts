@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { advancePressCycle, createPressCycleState, evaluatePressCycles, type PressCycleEvent, type PressCycleOptions, type PressCycleState } from '../src/utils/calibrationCapture.ts'
+import { advancePressCycle, createPressCycleState, evaluatePressCycles, pressCycleAction, type PressCycleEvent, type PressCycleOptions, type PressCycleState } from '../src/utils/calibrationCapture.ts'
 
 const optionsFor = (idle: number): PressCycleOptions => ({
 	idle,
@@ -126,3 +126,15 @@ test('evaluatePressCycles reports the spread against the span', () => {
 	assert.equal(pending.outcome, 'in-progress')
 	assert.equal(pending.spreadPercent, null)
 })
+
+test('pressCycleAction tells the operator which motion the current phase needs', () => {
+	const options = optionsFor(1000)
+	assert.equal(pressCycleAction(createPressCycleState()), 'press')
+	assert.equal(pressCycleAction(replay(press(3000, 2), options).state), 'hold')
+	assert.equal(pressCycleAction(replay(press(3000), options).state), 'release')
+	assert.equal(pressCycleAction(replay([...press(3000), 1000], options).state), 'release')
+	const finished = replay([...cycle(1000, press(3000)), ...cycle(1000, press(3010)), ...cycle(1000, press(2990))], options).state
+	assert.equal(finished.outcome, 'complete')
+	assert.equal(pressCycleAction(finished), 'press')
+})
+

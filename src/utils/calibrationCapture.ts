@@ -1,4 +1,5 @@
 import { median, secondDeepest } from './calibrationMath.ts'
+import type { CalibrationAction } from '../types/calibration.ts'
 
 export type PressCyclePhase = 'await-press' | 'press-sampling' | 'await-release' | 'idle-sampling'
 export type PressCycleOutcome = 'in-progress' | 'complete' | 'unstable'
@@ -64,6 +65,17 @@ export const evaluatePressCycles = (pressedCycles: number[], idleValues: number[
   if (ratio <= options.spreadLimit) return { outcome: 'complete', idle, pressed: windowPressed, spreadPercent }
   if (pressedCycles.length < options.maxPressCycles) return { outcome: 'in-progress', idle, pressed: overallPressed, spreadPercent }
   return { outcome: 'unstable', idle, pressed: overallPressed, spreadPercent }
+}
+
+// Maps the capture state to the motion the operator should make next.
+export const pressCycleAction = (state: PressCycleState): CalibrationAction => {
+  if (state.outcome !== 'in-progress') return 'press'
+  switch (state.phase) {
+    case 'press-sampling': return 'hold'
+    case 'await-release':
+    case 'idle-sampling': return 'release'
+    case 'await-press': return 'press'
+  }
 }
 
 export function advancePressCycle(state: PressCycleState, value: number, options: PressCycleOptions): PressCycleStep {

@@ -63,7 +63,32 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .calibration-workspace { display: grid; gap: 22px; }.calibration-page-header { display: flex; justify-content: space-between; align-items: start; gap: 24px; }.calibration-page-header h1 { margin: 0; font-size: 28px; }.calibration-page-grid { display: grid; grid-template-columns: minmax(510px, 1.45fr) minmax(290px, .75fr); gap: 22px; }.calibration-status-panel { padding: 22px; border: 1px solid var(--line); background: rgba(26,35,38,.94); }.calibration-status-list { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 18px 0; max-height: 390px; overflow-y: auto; }.calibration-status-item { display: flex; justify-content: space-between; gap: 8px; padding: 9px; color: var(--muted); border: 1px solid var(--line); background: #202b2e; font: 9px 'DM Mono', monospace; text-align: left; }.calibration-status-item strong { text-transform: uppercase; }.calibration-status-item.complete { color: var(--green); border-color: var(--green-dim); }.calibration-status-item.error { color: #ef9b91; border-color: #a64e45; background: rgba(180,58,48,.2); cursor: pointer; }.calibration-status-item.waiting { color: var(--orange); }.calibration-status-item.unstable { color: #f4a95f; border-color: #a86428; background: rgba(224,135,58,.15); cursor: pointer; }.calibration-progress { display: flex; justify-content: space-between; gap: 12px; margin: 8px auto 0; max-width: 565px; color: var(--muted); font: 11px 'DM Mono', monospace; }.calibration-progress strong { color: var(--green); }
 .calibration-status-item.preparing { color: var(--muted); opacity: .7; }
 .calibration-live-status { display: flex; flex-wrap: wrap; gap: 10px 22px; padding: 14px 16px; color: #cbd6d0; border: 1px solid var(--line); background: rgba(32,44,47,.72); font: 11px 'DM Mono', monospace; }.calibration-live-status strong { color: var(--green); }.calibration-live-status span { color: var(--muted); }
-.selection-toolbar { display: flex; align-items: center; justify-content: space-between; margin: -18px auto 10px; max-width: 565px; color: var(--muted); font: 10px 'DM Mono', monospace; }.selection-toolbar .text-button { margin: 0; padding: 4px 0; color: var(--green); font: inherit; }
+.calibration-live-row { display: flex; align-items: stretch; gap: 14px; }
+.calibration-live-row .calibration-live-status { flex: 1; }
+.calibration-action-guide { flex: none; width: 96px; height: 77px; align-self: center; overflow: visible; }
+.guide-housing-top { fill: #1b2629; stroke: #4e5e60; stroke-width: 1; stroke-linejoin: round; }
+.guide-housing-front { fill: #111a1c; stroke: #4e5e60; stroke-width: 1; stroke-linejoin: round; }
+.guide-housing-side { fill: #0c1315; stroke: #4e5e60; stroke-width: 1; stroke-linejoin: round; }
+.guide-key-top { fill: #33464a; stroke: #6b7d7f; stroke-width: 1; stroke-linejoin: round; }
+.guide-key-front { fill: #26363a; stroke: #6b7d7f; stroke-width: 1; stroke-linejoin: round; }
+.guide-key-side { fill: #1d2a2d; stroke: #6b7d7f; stroke-width: 1; stroke-linejoin: round; }
+.guide-arrow { fill: var(--orange); stroke: var(--orange); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.guide-release .guide-arrow { fill: var(--green); stroke: var(--green); }
+.guide-cross line { stroke: #ef9b91; stroke-width: 3; stroke-linecap: round; }
+.guide-press .guide-key { animation: guide-press-key 1.2s ease-in infinite; }
+.guide-press .guide-arrow-down { animation: guide-press-arrow 1.2s ease-in infinite; }
+.guide-hold .guide-key { transform: translateY(10px); }
+.guide-hold .guide-arrow-down { opacity: .5; }
+.guide-release .guide-key { animation: guide-release-key 1.2s ease-out infinite; }
+.guide-release .guide-arrow-up { animation: guide-release-arrow 1.2s ease-out infinite; }
+@keyframes guide-press-key { 0%, 15% { transform: translateY(0); } 60%, 100% { transform: translateY(10px); } }
+@keyframes guide-press-arrow { 0% { opacity: 0; transform: translateY(-6px); } 25%, 60% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(6px); } }
+@keyframes guide-release-key { 0%, 20% { transform: translateY(10px); } 60%, 100% { transform: translateY(0); } }
+@keyframes guide-release-arrow { 0% { opacity: 0; transform: translateY(6px); } 25%, 60% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .guide-press .guide-key, .guide-press .guide-arrow-down, .guide-release .guide-key, .guide-release .guide-arrow-up { animation: none; }
+  .guide-press .guide-key { transform: translateY(10px); }
+}.selection-toolbar { display: flex; align-items: center; justify-content: space-between; margin: -18px auto 10px; max-width: 565px; color: var(--muted); font: 10px 'DM Mono', monospace; }.selection-toolbar .text-button { margin: 0; padding: 4px 0; color: var(--green); font: inherit; }
 
 
 .calibration-status-item small { display: block; margin-top: 4px; color: inherit; opacity: .75; font-size: 8px; }
