@@ -2,6 +2,10 @@
 
 English | [日本語](#日本語)
 
+![RapidJAM Configurator button mapping screen / ボタン割り当て画面](docs/images/button-mapping.png)
+
+*Button mapping screen, shown with the demo device in English. / ボタン割り当て画面（デモデバイス、英語表示）*
+
 A Windows desktop app for configuring a RapidJAM controller. It talks to the controller's WebConfig interface (`http://192.168.7.1`) over USB to read and write settings and to calibrate the magnetic (Hall-effect) switches.
 
 ## Features
