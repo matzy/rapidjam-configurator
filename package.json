@@ -20,7 +20,8 @@
     "test:button-labels": "node --experimental-strip-types --test tests/buttonLabels.test.ts",
     "test:hardware-labels": "node --experimental-strip-types --test tests/hardwareLabels.test.ts",
     "test:button-face": "node --experimental-strip-types --test tests/buttonFaceTuning.test.ts tests/buttonFaceTuningValidation.test.ts",
-    "test:button-face-svg": "node --experimental-strip-types --test tests/buttonFaceSvg.test.ts"
+    "test:button-face-svg": "node --experimental-strip-types --test tests/buttonFaceSvg.test.ts",
+    "test:settings-backup": "node --test scripts/settings-backup.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",

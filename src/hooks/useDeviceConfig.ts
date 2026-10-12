@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { DeviceConfig, DeviceInfo, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting, InputModeConfig } from '../device'
 import { defaultConfig } from '../device'
+import type { RawDeviceSnapshot } from '../transport/configPersistence.mjs'
+import type { RestorePlan } from '../transport/settingsBackup.mjs'
 
 export function useDeviceConfig(transport: DeviceTransport) {
   const [device, setDevice] = useState<DeviceInfo | null>(null)
@@ -113,6 +115,32 @@ export function useDeviceConfig(transport: DeviceTransport) {
     setNotice('Changes discarded')
   }
 
+  function readSettingsSnapshot(): Promise<RawDeviceSnapshot> {
+    return transport.readRawSnapshot()
+  }
+
+  async function applySettingsRestore(plan: RestorePlan, baseline: RawDeviceSnapshot) {
+    if (busy || !device || dirty) throw new Error('Restore is not available until pending changes are saved or discarded.')
+    setBusy(true)
+    try {
+      const restored = await transport.restoreSettings(plan, baseline)
+      setConfig(restored)
+      setSavedConfig(structuredClone(restored))
+      setNotice('Settings restored to RapidJAM')
+    } catch (error) {
+      recordDiagnostic(error)
+      setNotice('Restore did not complete. Current device settings are shown.')
+      try {
+        const current = await transport.readConfig()
+        setConfig(current)
+        setSavedConfig(structuredClone(current))
+      } catch (readError) {
+        recordDiagnostic(readError)
+      }
+      throw error
+    } finally { setBusy(false) }
+  }
+
   async function saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>, nextConfig: DeviceConfig) {
     setBusy(true)
     try {
@@ -127,5 +155,5 @@ export function useDeviceConfig(transport: DeviceTransport) {
     } finally { setBusy(false) }
   }
 
-  return { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateConfig, updateMapping, updateHall, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration }
+  return { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateConfig, updateMapping, updateHall, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration, readSettingsSnapshot, applySettingsRestore }
 }

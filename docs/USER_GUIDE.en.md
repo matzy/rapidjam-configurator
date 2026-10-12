@@ -29,7 +29,7 @@ After connecting, press "Reconnect device" at the bottom left to read the settin
 | Area | Contents |
 | --- | --- |
 | Top | Product name and firmware, the Expert mode button, and the display language selector |
-| Left | Switch between "Button mapping" and "Magnetic switches", connection status, "Reconnect device", "Restart in gamepad mode", and "Connection diagnostic" |
+| Left | Switch between "Button mapping" and "Magnetic switches", connection status, "Reconnect device", "Restart in gamepad mode", "Settings backup and restore", and "Connection diagnostic" |
 | Center | The content of the selected screen |
 | Bottom | Save status ("Unsaved changes" / "All changes saved"), "Discard", and "Save to device" |
 
@@ -160,11 +160,32 @@ Pressing buttons or unplugging USB during calibration can make the measurement f
 
 Select "Restart in gamepad mode" on the left to return RapidJAM to normal gamepad operation. It is expected that the connection to the configurator is lost at this point. To configure the device again, switch back to WebConfig/RNDIS mode and reconnect.
 
-## 9. Troubleshooting
+## 9. Settings backup and restore
+
+Open "Settings backup and restore" in the left sidebar to show "Save settings backup" and "Restore settings from backup". "Save settings backup" saves the current device settings as `rapidjam_backup_<date and time>.gp2040`. This file uses the same format as the GP2040-CE WebConfig backup. Configurator-only data (the full stroke length for the current device) is stored under the `rapidjamConfigurator` key. WebConfig ignores this key.
+
+To restore, use "Restore settings from backup".
+
+1. Choose the `.gp2040` file to restore. The preview lists the items that will be restored, the values that will change, ignored items, and warnings.
+2. Under "1. Save current settings", back up the current settings first. This file lets you undo the restore if something goes wrong.
+3. Check every confirmation box, then press "2. Restore settings".
+
+Notes:
+
+- Only four items are restored: GPIO, magnetic switches, gamepad options, and keyboard. Items missing from the file keep their current values.
+- Restore requires that there are no unsaved changes. Save or discard them first.
+- Writes happen one item at a time, not as a single transaction. If an error occurs partway through, items that were already written are not rolled back. Check the result message, and if needed, start again from step 1.
+- Magnetic switch calibration values differ for each board. Restoring a backup from a different RapidJAM may make the buttons respond incorrectly.
+- Restoring does not change the firmware.
+- The full stroke length is stored on this PC. Restoring can change it to the value in the file.
+- A backup created with WebConfig has no Configurator-only data. Confirm that it came from the same board before restoring it.
+
+## 10. Troubleshooting
 
 | Symptom | What to check |
 | --- | --- |
 | The app does not start | Check that the WebView2 Runtime is installed. |
+| Settings restore failed partway | Some items may already have been written. Check the result message for which items were applied, then reconnect and read the settings from the device. |
 | Cannot connect | Check the USB cable, WebConfig/RNDIS mode, and whether `192.168.7.1` responds. Try "Retry" or "Reconnect device". |
 | An error appears when saving | Some settings may have been written partially. Reconnect before retrying, then read the settings from the device to confirm the actual state. |
 | Calibration does not start | Check that the firmware supports ADC29. If a live reading timed out, reconnect to the device first. |
@@ -173,11 +194,11 @@ Select "Restart in gamepad mode" on the left to return RapidJAM to normal gamepa
 
 Technical information for troubleshooting may be shown when you open "Connection diagnostic" on the left. When reporting a problem, include this diagnostic information, the app version, and the firmware version.
 
-## 10. What the app stores on your PC
+## 11. What the app stores on your PC
 
 The language, Standard / Expert mode, and the full stroke length for each model are stored in the WebView2 data folder. The location is `%LOCALAPPDATA%\Goppa\rapidjam.configurator\EBWebView`, not next to the EXE. To reset the app's stored data, close the app and delete this folder. This clears the language, mode, and full stroke length settings. The settings stored on the device are not affected.
 
-## 11. Disclaimer and trademarks
+## 12. Disclaimer and trademarks
 
 - This software is provided without warranty. The display does not guarantee that a setting was written to the device or that it works correctly on every machine. After making changes, check the inputs in the environment where you use them.
 - This is an unofficial project. The names of game consoles, platforms, and products that appear in the documentation and screens (such as Nintendo Switch, PlayStation, Xbox, and the mini retro consoles) are trademarks or registered trademarks of their respective owners. This project is not affiliated with those owners and is not endorsed, sponsored, or recommended by them.

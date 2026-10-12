@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { rawToRatio, ratioToRaw } from './utils/calibrationMath'
+import { assertSnapshotEqual, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
+import { commitRestorePlan, type RestorePlan } from './transport/settingsBackup.mjs'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
@@ -77,6 +79,8 @@ export interface DeviceTransport {
   connect(): Promise<DeviceInfo>
   restartToGamepad(): Promise<void>
   readConfig(): Promise<DeviceConfig>
+  readRawSnapshot(): Promise<RawDeviceSnapshot>
+  restoreSettings(plan: RestorePlan, baseline: RawDeviceSnapshot): Promise<DeviceConfig>
   supportsLiveHallCalibration(): boolean
   prepareHallCalibration(): Promise<void>
   readHallVoltage(channel: number, onAttempt?: (attempt: number) => void): Promise<number>
@@ -145,6 +149,120 @@ async function requestDeviceApi(path: string, method: string, body?: BodyInit | 
   return new Response(response.body, { status: response.status })
 }
 
+function decodeSnapshotConfig(snapshot: RawDeviceSnapshot): DeviceConfig {
+  const { pinMappings, hallCalibrations: calibrations, gamepadOptions, keyMappings: keyboardMappings } = snapshot
+  const next = cloneConfig(defaultConfig)
+  for (let pin = 0; pin <= 5; pin++) {
+    const mapping = pinMappings[`pin${String(pin).padStart(2, '0')}`]
+    if (mapping) next.gpioMappings[`gp${pin}` as GpioPin] = actionFromGpioValue(mapping.action)
+  }
+  for (let channel = 0; channel < 16; channel++) {
+    const trigger = calibrations.triggers[channel]
+    if (!trigger) continue
+    const id = `ch${channel}` as HallChannel
+    next.hallMappings[id] = actionFromGpioValue(trigger.action) as Action
+    next.hall[id] = {
+      idle: trigger.idle,
+      active: trigger.active,
+      pressed: trigger.pressed,
+      threshold: trigger.release,
+      noise: trigger.noise,
+      polarity: trigger.is_polarized ? 'P' : 'N',
+      pressRatio: rawToRatio(trigger.active, trigger.idle, trigger.pressed),
+      releaseRatio: rawToRatio(trigger.release, trigger.idle, trigger.pressed),
+      rapidTrigger: Boolean(trigger.rapidTrigger),
+      calibrated: trigger.idle !== trigger.pressed,
+    }
+  }
+  next.inputMode = {
+    inputMode: Number(gamepadOptions.inputMode ?? next.inputMode.inputMode),
+    inputDeviceType: Number(gamepadOptions.inputDeviceType ?? next.inputMode.inputDeviceType),
+    ps4AuthType: Number(gamepadOptions.ps4AuthType ?? next.inputMode.ps4AuthType),
+    ps5AuthType: Number(gamepadOptions.ps5AuthType ?? next.inputMode.ps5AuthType),
+    xinputAuthType: Number(gamepadOptions.xinputAuthType ?? next.inputMode.xinputAuthType),
+    ps4ControllerIDMode: Number(gamepadOptions.ps4ControllerIDMode ?? next.inputMode.ps4ControllerIDMode),
+    switchTpShareForDs4: jsonBoolean(gamepadOptions.switchTpShareForDs4),
+    usbDescOverride: jsonBoolean(gamepadOptions.usbDescOverride),
+    usbDescProduct: String(gamepadOptions.usbDescProduct ?? ''),
+    usbDescManufacturer: String(gamepadOptions.usbDescManufacturer ?? ''),
+    usbDescVersion: String(gamepadOptions.usbDescVersion ?? ''),
+    usbOverrideID: jsonBoolean(gamepadOptions.usbOverrideID),
+    usbVendorID: String(gamepadOptions.usbVendorID ?? '0000'),
+    usbProductID: String(gamepadOptions.usbProductID ?? '0000'),
+  }
+  Object.keys(next.keyboardMappings).forEach((key) => {
+    if (typeof keyboardMappings[key] === 'number') next.keyboardMappings[key as KeyboardAction] = keyboardMappings[key]
+  })
+  return next
+}
+
+// Mirrors the raw shape firmware returns, so the mock exercises the same decode and restore paths.
+function encodeRawSnapshot(config: DeviceConfig): RawDeviceSnapshot {
+  const actionValue = (name: string): number => {
+    const value = gpioActionValues[name]
+    if (value === undefined) throw new Error(`Unsupported GPIO action: ${name}`)
+    return value
+  }
+  const pinMappings = {} as RawDeviceSnapshot['pinMappings']
+  for (let pin = 0; pin < 30; pin++) {
+    const assignment = pin <= 5 ? config.gpioMappings[`gp${pin}` as GpioPin] : 'NONE'
+    pinMappings[`pin${String(pin).padStart(2, '0')}`] = { action: actionValue(assignment), customButtonMask: 0, customDpadMask: 0 }
+  }
+  const triggers = Array.from({ length: 32 }, (_, channel) => {
+    if (channel >= 16) return { action: gpioActionValues.NONE, idle: 0, active: 0, pressed: 0, release: 0, noise: 0, is_polarized: 0, rapidTrigger: 0 }
+    const id = `ch${channel}` as HallChannel
+    const setting = config.hall[id]
+    return {
+      action: actionValue(config.hallMappings[id]),
+      idle: setting.idle,
+      active: setting.active,
+      pressed: setting.pressed,
+      release: setting.threshold,
+      noise: setting.noise,
+      is_polarized: setting.polarity === 'P' ? 1 : 0,
+      rapidTrigger: setting.rapidTrigger ? 1 : 0,
+    }
+  })
+  const input = config.inputMode
+  const gamepadOptions: Record<string, unknown> = {
+    dpadMode: 0,
+    inputMode: input.inputMode,
+    inputDeviceType: input.inputDeviceType,
+    socdMode: 0,
+    switchTpShareForDs4: input.switchTpShareForDs4 ? 1 : 0,
+    lockHotkeys: 0,
+    fourWayMode: 0,
+    profileNumber: 0,
+    debounceDelay: 5,
+    inputModeB1: 0, inputModeB2: 0, inputModeB3: 0, inputModeB4: 0,
+    inputModeL1: 0, inputModeL2: 0, inputModeR1: 0, inputModeR2: 0,
+    ps4AuthType: input.ps4AuthType,
+    ps5AuthType: input.ps5AuthType,
+    xinputAuthType: input.xinputAuthType,
+    ps4ControllerIDMode: input.ps4ControllerIDMode,
+    usbDescOverride: input.usbDescOverride ? 1 : 0,
+    usbDescManufacturer: input.usbDescManufacturer,
+    usbDescProduct: input.usbDescProduct,
+    usbDescVersion: input.usbDescVersion,
+    usbOverrideID: input.usbOverrideID ? 1 : 0,
+    usbVendorID: input.usbVendorID,
+    usbProductID: input.usbProductID,
+    miniMenuGamepadInput: 0,
+    fnButtonPin: deriveFnButtonPin(pinMappings, gpioActionValues.FN),
+    forcedSetupMode: 0,
+    ...Object.fromEntries(Array.from({ length: 16 }, (_, index) => [
+      `hotkey${String(index + 1).padStart(2, '0')}`,
+      { auxMask: 0, buttonsMask: 0, action: 0 },
+    ])),
+  }
+  return {
+    pinMappings,
+    hallCalibrations: { triggers },
+    keyMappings: { ...config.keyboardMappings },
+    gamepadOptions,
+  }
+}
+
 export class MockTransport implements DeviceTransport {
   private config = cloneConfig(defaultConfig)
   private preview: DeviceConfig | null = null
@@ -165,6 +283,14 @@ export class MockTransport implements DeviceTransport {
 
   async restartToGamepad(): Promise<void> {}
   async readConfig(): Promise<DeviceConfig> { return cloneConfig(this.config) }
+  async readRawSnapshot(): Promise<RawDeviceSnapshot> { return encodeRawSnapshot(this.config) }
+  async restoreSettings(plan: RestorePlan, baseline: RawDeviceSnapshot): Promise<DeviceConfig> {
+    if (!plan.ok) throw new Error('Restore plan has blocking issues; nothing was changed.')
+    assertSnapshotEqual(encodeRawSnapshot(this.config), baseline, 'Pre-restore freshness')
+    this.config = decodeSnapshotConfig(plan.expected)
+    this.preview = null
+    return cloneConfig(this.config)
+  }
   supportsLiveHallCalibration(): boolean { return true }
   async prepareHallCalibration(): Promise<void> {}
   async readHallVoltage(channel: number): Promise<number> { return this.config.hall[`ch${channel}` as HallChannel].idle }
@@ -240,56 +366,28 @@ export class HttpTransport implements DeviceTransport {
 
   supportsLiveHallCalibration(): boolean { return true }
 
-  async readConfig(): Promise<DeviceConfig> {
-    const [pinMappings, calibrations, gamepadOptions, keyboardMappings] = await Promise.all([
+  async readRawSnapshot(): Promise<RawDeviceSnapshot> {
+    const [pinMappings, hallCalibrations, gamepadOptions, keyMappings] = await Promise.all([
       this.request<Record<string, { action: number, customButtonMask: number, customDpadMask: number }>>('/api/getPinMappings'),
-      this.request<{ triggers: Array<{ action: number, idle: number, active: number, pressed: number, is_polarized: number, release: number, noise: number, rapidTrigger: number }> }>('/api/getHETriggerCalibrations'),
+      this.request<{ triggers: Array<Record<string, unknown>> }>('/api/getHETriggerCalibrations'),
       this.request<Record<string, unknown>>('/api/getGamepadOptions'),
       this.request<Record<string, number>>('/api/getKeyMappings'),
     ])
-    const next = cloneConfig(defaultConfig)
-    for (let pin = 0; pin <= 5; pin++) {
-      const mapping = pinMappings[`pin${String(pin).padStart(2, '0')}`]
-      if (mapping) next.gpioMappings[`gp${pin}` as GpioPin] = actionFromGpioValue(mapping.action)
-    }
-    for (let channel = 0; channel < 16; channel++) {
-      const trigger = calibrations.triggers[channel]
-      if (!trigger) continue
-      const id = `ch${channel}` as HallChannel
-      next.hallMappings[id] = actionFromGpioValue(trigger.action) as Action
-      next.hall[id] = {
-        idle: trigger.idle,
-        active: trigger.active,
-        pressed: trigger.pressed,
-        threshold: trigger.release,
-        noise: trigger.noise,
-        polarity: trigger.is_polarized ? 'P' : 'N',
-        pressRatio: rawToRatio(trigger.active, trigger.idle, trigger.pressed),
-        releaseRatio: rawToRatio(trigger.release, trigger.idle, trigger.pressed),
-        rapidTrigger: Boolean(trigger.rapidTrigger),
-        calibrated: trigger.idle !== trigger.pressed,
-      }
-    }
-    next.inputMode = {
-      inputMode: Number(gamepadOptions.inputMode ?? next.inputMode.inputMode),
-      inputDeviceType: Number(gamepadOptions.inputDeviceType ?? next.inputMode.inputDeviceType),
-      ps4AuthType: Number(gamepadOptions.ps4AuthType ?? next.inputMode.ps4AuthType),
-      ps5AuthType: Number(gamepadOptions.ps5AuthType ?? next.inputMode.ps5AuthType),
-      xinputAuthType: Number(gamepadOptions.xinputAuthType ?? next.inputMode.xinputAuthType),
-      ps4ControllerIDMode: Number(gamepadOptions.ps4ControllerIDMode ?? next.inputMode.ps4ControllerIDMode),
-      switchTpShareForDs4: jsonBoolean(gamepadOptions.switchTpShareForDs4),
-      usbDescOverride: jsonBoolean(gamepadOptions.usbDescOverride),
-      usbDescProduct: String(gamepadOptions.usbDescProduct ?? ''),
-      usbDescManufacturer: String(gamepadOptions.usbDescManufacturer ?? ''),
-      usbDescVersion: String(gamepadOptions.usbDescVersion ?? ''),
-      usbOverrideID: jsonBoolean(gamepadOptions.usbOverrideID),
-      usbVendorID: String(gamepadOptions.usbVendorID ?? '0000'),
-      usbProductID: String(gamepadOptions.usbProductID ?? '0000'),
-    }
-    Object.keys(next.keyboardMappings).forEach((key) => {
-      if (typeof keyboardMappings[key] === 'number') next.keyboardMappings[key as KeyboardAction] = keyboardMappings[key]
+    return { pinMappings, hallCalibrations, gamepadOptions, keyMappings } as RawDeviceSnapshot
+  }
+
+  async readConfig(): Promise<DeviceConfig> {
+    return decodeSnapshotConfig(await this.readRawSnapshot())
+  }
+
+  async restoreSettings(plan: RestorePlan, baseline: RawDeviceSnapshot): Promise<DeviceConfig> {
+    const { snapshot } = await commitRestorePlan({
+      plan,
+      baseline,
+      request: (path, options) => this.request(path, options),
+      readSnapshot: () => this.readRawSnapshot(),
     })
-    return next
+    return decodeSnapshotConfig(snapshot)
   }
 
   async prepareHallCalibration(): Promise<void> {
