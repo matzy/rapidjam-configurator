@@ -174,6 +174,15 @@ try {
 
   $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
   Set-Content -LiteralPath $checksumPath -Value "$hash  $releaseName.zip" -Encoding ascii
+  if ($env:GITHUB_OUTPUT) {
+    $outputLines = @(
+      "release_name=$releaseName",
+      "archive_path=$archivePath",
+      "checksum_path=$checksumPath",
+      "executable_path=$executablePath"
+    )
+    [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, (($outputLines -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+  }
   Write-Host "Created: $archivePath" -ForegroundColor Green
   Write-Host "SHA-256: $hash"
 } finally {

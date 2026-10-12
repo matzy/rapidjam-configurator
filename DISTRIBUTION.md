@@ -19,6 +19,25 @@ The ZIP contains the application executable, `WebView2Loader.dll`, npm productio
 
 The Japanese user guide `docs/USER_GUIDE.ja.md` is copied into the archive by the release script. The manifest records its SHA-256 so the packaged user instructions can be verified against the source. This hash confirms file identity only; it does not verify content.
 
+### Release via GitHub Actions
+
+`.github/workflows/release.yml` builds the same ZIP on `windows-latest`. It runs when a `v*` tag is pushed, and it can also be started manually with `workflow_dispatch` (manual runs only upload the ZIP and checksum as a workflow artifact and do not create a Release).
+
+1. Bump the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock`, then merge to the default branch. `npm run release:check` verifies these match.
+2. Create and push the tag `v<version>` (for example `v0.7.0`). The workflow stops if the tag does not match `package.json`.
+3. The workflow creates a **draft** GitHub Release with the ZIP and its `.sha256` file. The release notes are taken from `docs/release-notes/<tag>.md` (for example `docs/release-notes/v0.7.0.md`), so write that file before tagging. Review the notes and assets, then publish the draft manually. If a draft for that tag already exists, delete it before re-running.
+
+The workflow runs `build-tauri-distribution.ps1`, so the ZIP built in CI has the same contents as a local build. The workflow can also create GitHub Artifact Attestations (build provenance) for the ZIP and the executable when the repository supports them.
+
+To verify a downloaded file:
+
+- Compare its SHA-256 with the `.sha256` file: `Get-FileHash <zip> -Algorithm SHA256`
+- Check its provenance (requires GitHub CLI and an attestation for the file): `gh attestation verify <zip> -R matzy/rapidjam-configurator`
+
+### SmartScreen warning (unsigned build)
+
+The executable is not code-signed. Browsers mark the downloaded ZIP and Windows SmartScreen shows "Windows protected your PC". Users can continue with **More info → Run anyway**. Signing does not remove this warning immediately, because SmartScreen reputation also has to build up. Code signing is a separate, later step; the release workflow does not sign yet.
+
 ### WebView2 requirement and update responsibility
 
 This first portable build uses the Windows **Evergreen WebView2 Runtime** already installed on the target. Windows 11 normally includes it, and most Windows 10 machines have it, but an older or managed Windows 10 PC may not. The package intentionally does not download or silently install WebView2. Confirm WebView2 is present before delivery; if missing, the deployment owner must arrange an approved WebView2 installation before using this build.
