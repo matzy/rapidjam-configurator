@@ -38,6 +38,12 @@ export interface PressCycleDecision {
   spreadPercent: number | null
 }
 
+// Returns the channels to calibrate in channel order. An empty selection means every channel.
+export const normalizeCalibrationTargets = (selected: readonly number[] | undefined, channelCount = 16): number[] => {
+  if (!selected || selected.length === 0) return Array.from({ length: channelCount }, (_, index) => index)
+  return [...new Set(selected)].filter((index) => index >= 0 && index < channelCount).sort((a, b) => a - b)
+}
+
 export const createPressCycleState = (): PressCycleState => ({
   phase: 'await-press',
   samples: [],

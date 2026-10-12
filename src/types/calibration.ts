@@ -6,7 +6,7 @@ export type CalibrationResult = {
   idle: number
   pressed: number | null
   polarity: 'N' | 'P' | null
-  status: 'preparing' | 'waiting' | 'pressing' | 'complete' | 'skipped' | 'unstable' | 'error'
+  status: 'preparing' | 'waiting' | 'pressing' | 'complete' | 'skipped' | 'excluded' | 'unstable' | 'error'
   attempt?: number
   sampleCount?: number
   pressCount?: number

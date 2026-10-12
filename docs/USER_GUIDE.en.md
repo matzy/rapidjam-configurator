@@ -145,7 +145,9 @@ The full stroke length is saved in the app on this PC for each model. Changing i
 
 Calibration re-measures the idle position and the pressed position of each switch. The firmware must support voltage readings from ADC29. If it does not, the button is disabled.
 
-1. Select "Calibrate all Hall buttons".
+You can calibrate all channels with "Calibrate all Hall buttons", or only the selected buttons with "Calibrate selected buttons". The latter measures only the buttons selected in the button list. Buttons that are not selected are not measured, their status is "excluded" (grey), and their calibration values stay unchanged.
+
+1. Choose the target. For all buttons, select "Calibrate all Hall buttons". For some buttons, select them in the button list first, then select "Calibrate selected buttons".
 2. The idle-position measurement starts. Do not touch the controller's buttons while it runs.
 3. When the pressed-position measurement starts, press each button fully as you normally would, then release it. The order does not matter. When asked, press it again. This repeats about three times. The measured values are taken from these presses.
    - If the presses do not agree closely, the configurator asks for up to five presses in total. A channel whose presses still disagree is marked "unstable" (orange). Check its result and measure it again if needed.

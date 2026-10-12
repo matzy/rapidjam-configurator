@@ -33,7 +33,7 @@ interface HallPanelProps {
   onSelectAll: () => void
   onChange: (buttons: ReadonlyArray<HallChannel>, patch: Partial<HallSetting>) => void
   calibrationAvailable: boolean
-  onStartCalibration: () => void
+  onStartCalibration: (targets?: HallChannel[]) => void
   calibrationPanel: ReactNode
   actuationMax: number
 }
@@ -137,7 +137,8 @@ export function HallPanel({ config, savedConfig, activeButton, selectedButtons, 
         {hall.rapidTrigger && <SettingSlider label={t('Rapid Trigger Threshold')} value={displayedRelease} max={strokeMm} onChange={(value) => onChange(selectedButtons, { releaseRatio: millimetersToRatio(value, strokeMm) })} />}
         {hall.rapidTrigger && <SettingNumber label={t('Rapid Trigger Noise Filter')} value={hall.noise} min={0} max={4095} onChange={(value) => onChange(selectedButtons, { noise: value })} />}
         <label className="toggle-row"><span><strong>{t('Rapid Trigger')}</strong><small>{t('Reset as soon as the key moves upward')}</small></span><input aria-label={t('Rapid Trigger')} type="checkbox" checked={hall.rapidTrigger} onChange={(event) => onChange(selectedButtons, { rapidTrigger: event.target.checked })} /><span className="toggle" /></label>
-        <button className="calibrate-button" onClick={onStartCalibration} disabled={!calibrationAvailable || calibrationStarting || calibrationBlocked}>{t(calibrationStarting ? 'Waiting for live read to finish...' : calibrationBlocked ? 'Reconnect device before calibrating' : 'Calibrate all Hall buttons')} <ChevronRight size={16} /></button>
+        <button className="calibrate-button" onClick={() => onStartCalibration()} disabled={!calibrationAvailable || calibrationStarting || calibrationBlocked}>{t(calibrationStarting ? 'Waiting for live read to finish...' : calibrationBlocked ? 'Reconnect device before calibrating' : 'Calibrate all Hall buttons')} <ChevronRight size={16} /></button>
+        <button className="calibrate-button calibrate-selected-button" onClick={() => onStartCalibration([...selectedButtons])} disabled={!calibrationAvailable || calibrationStarting || calibrationBlocked || selectedButtons.length === 0}>{t('Calibrate selected buttons')} ({selectedButtons.length}) <ChevronRight size={16} /></button>
         {!calibrationAvailable && <p className="calibration-unavailable">{t('Live calibration is disabled until firmware supports ADC29 voltage reads.')}</p>}
         {calibrationBlocked && <p className="calibration-unavailable">{t('Calibration is blocked because a live request timed out. Reconnect the controller first.')}</p>}
       </div>

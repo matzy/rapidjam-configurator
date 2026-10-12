@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { advancePressCycle, createPressCycleState, evaluatePressCycles, pressCycleAction, type PressCycleEvent, type PressCycleOptions, type PressCycleState } from '../src/utils/calibrationCapture.ts'
+import { advancePressCycle, createPressCycleState, evaluatePressCycles, normalizeCalibrationTargets, pressCycleAction, type PressCycleEvent, type PressCycleOptions, type PressCycleState } from '../src/utils/calibrationCapture.ts'
 
 const optionsFor = (idle: number): PressCycleOptions => ({
 	idle,
@@ -138,3 +138,9 @@ test('pressCycleAction tells the operator which motion the current phase needs',
 	assert.equal(pressCycleAction(finished), 'press')
 })
 
+test('normalizeCalibrationTargets treats an empty selection as every channel and keeps channel order', () => {
+	assert.deepEqual(normalizeCalibrationTargets(undefined), Array.from({ length: 16 }, (_, index) => index))
+	assert.deepEqual(normalizeCalibrationTargets([]), Array.from({ length: 16 }, (_, index) => index))
+	assert.deepEqual(normalizeCalibrationTargets([9, 2, 9, 0]), [0, 2, 9])
+	assert.deepEqual(normalizeCalibrationTargets([3, 16, -1]), [3])
+})

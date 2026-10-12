@@ -86,10 +86,10 @@ export function App() {
     setSelectedHallButtons(hallChannels)
   }
 
-  async function startCalibration() {
+  async function startCalibration(targets?: HallChannel[]) {
     if (calibrationStartInFlight.current || hallLiveReads.requiresReconnect) return
     if (!transport.supportsLiveHallCalibration()) {
-      await calibration.startCalibration()
+      await calibration.startCalibration(targets)
       return
     }
     calibrationStartInFlight.current = true
@@ -102,7 +102,7 @@ export function App() {
         hallLiveReads.resumeAfterCalibration()
         return
       }
-      await calibration.startCalibration()
+      await calibration.startCalibration(targets)
     } catch (error) {
       if (error instanceof LiveHallReadTimeoutError) {
         setNotice('Calibration is blocked because a live request timed out. Reconnect the controller first.')
@@ -170,6 +170,7 @@ export function App() {
   function handleCalibrationCircle(channel: HallChannel) {
     if (!calibrationResults || (calibrationStage !== 'capture' && calibrationStage !== 'review')) return
     const status = calibrationResults[channel].status
+    if (status === 'excluded') return
     if (calibrationStage === 'review') {
       if (status !== 'complete' && status !== 'unstable' && status !== 'error') return
       calibration.remeasureFromReview(channel)
