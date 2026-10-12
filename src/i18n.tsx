@@ -28,7 +28,7 @@ const japanese: Record<string, string> = {
   'RapidJAM is restarting in gamepad mode': 'RapidJAM をゲームパッドモードで再起動しています',
   'The configurator connection will close while RapidJAM returns to normal gamepad operation.': 'RapidJAM が通常のゲームパッド動作に戻ると、設定アプリとの接続は切断されます。',
   'Cannot connect to RapidJAM': 'RapidJAM に接続できません',
-  'Check the USB connection and press Retry. Other controls are unavailable until the connection is restored.': 'USB 接続を確認して「再試行」を押してください。接続が復旧するまで、ほかの操作はできません。',
+  'Check the USB connection and make sure RapidJAM is running in WebConfig/RNDIS mode, then press Retry. Other controls are unavailable until the connection is restored.': 'USB 接続と、RapidJAM が WebConfig/RNDIS モードで起動しているかを確認して「再試行」を押してください。接続が復旧するまで、ほかの操作はできません。',
   'Retry': '再試行',
   'INPUT MODE': '入力モード',
   'Button mapping': 'ボタン割り当て',

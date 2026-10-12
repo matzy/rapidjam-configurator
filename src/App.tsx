@@ -187,7 +187,7 @@ export function App() {
     {(connectionFailed || restartComplete) && <div className="connect-error-overlay">
       <div className="connect-error-card">
         {restartComplete ? <Check size={40} /> : <AlertTriangle size={40} />}
-        {restartComplete ? <><h2>{t('RapidJAM is restarting in gamepad mode')}</h2><p>{t('The configurator connection will close while RapidJAM returns to normal gamepad operation.')}</p></> : <><h2>{t('Cannot connect to RapidJAM')}</h2><p>{t('Check the USB connection and press Retry. Other controls are unavailable until the connection is restored.')}</p>{diagnostic && <code>{diagnostic}</code>}<button className="primary-button" onClick={() => void reconnectDevice()} disabled={busy}>{t(busy ? 'Connecting...' : 'Retry')}</button></>}
+        {restartComplete ? <><h2>{t('RapidJAM is restarting in gamepad mode')}</h2><p>{t('The configurator connection will close while RapidJAM returns to normal gamepad operation.')}</p></> : <><h2>{t('Cannot connect to RapidJAM')}</h2><p>{t('Check the USB connection and make sure RapidJAM is running in WebConfig/RNDIS mode, then press Retry. Other controls are unavailable until the connection is restored.')}</p>{diagnostic && <code>{diagnostic}</code>}<button className="primary-button" onClick={() => void reconnectDevice()} disabled={busy}>{t(busy ? 'Connecting...' : 'Retry')}</button></>}
       </div>
     </div>}
     {expertConfirmOpen && <div className="connect-error-overlay">

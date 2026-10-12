@@ -20,7 +20,7 @@ The app only communicates with this address. It does not need an internet connec
 1. Extract the ZIP to any folder and start `rapidjam-configurator.exe`. Administrator rights are not required.
 2. Put RapidJAM in WebConfig/RNDIS mode and connect it to the PC with USB.
 3. The RapidJAM product name and firmware information appear at the top of the screen. If "RapidJAM connected" appears at the bottom left, the connection is working.
-4. If the connection fails, the screen shows "Cannot connect to RapidJAM". Check the USB connection and the mode, then press "Retry".
+4. If the connection fails, the screen shows "Cannot connect to RapidJAM". Check the USB connection and make sure RapidJAM is in WebConfig/RNDIS mode, then press "Retry".
 
 After connecting, press "Reconnect device" at the bottom left to read the settings again.
 
