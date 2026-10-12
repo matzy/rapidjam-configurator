@@ -1,6 +1,8 @@
 :root { font-family: 'Segoe UI', sans-serif; color: #e6ece9; background: #12181b; font-synthesis: none; --bg: #12181b; --panel: #1a2326; --panel-hi: #202c2f; --line: #334044; --muted: #8b9a9b; --green: #b7f24b; --green-dim: #607d32; --orange: #ee9b4d; --hardware-engraving-opacity: .08; --actionbar-height: 68px; }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 960px; min-height: 100vh; background: radial-gradient(circle at 70% 0%, #203238 0, transparent 38%), var(--bg); }
+body { margin: 0; min-width: 960px; min-height: 100vh; background: radial-gradient(circle at 70% 0%, #203238 0, transparent 38%), var(--bg); user-select: none; }
+/* Keep form fields and diagnostic/version text copyable. */
+input, textarea, select, .connect-error-card code, .diagnostic code, .device-status, .calibration-table, .meter-error { user-select: text; }
 button, select, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .45; }
