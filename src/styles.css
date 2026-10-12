@@ -76,17 +76,17 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .guide-cross line { stroke: #ef9b91; stroke-width: 3; stroke-linecap: round; }
 .guide-press .guide-key { animation: guide-press-key 1.2s ease-in infinite; }
 .guide-press .guide-arrow-down { animation: guide-press-arrow 1.2s ease-in infinite; }
-.guide-hold .guide-key { transform: translateY(10px); }
+.guide-hold .guide-key { transform: translateY(12px); }
 .guide-hold .guide-arrow-down { opacity: .5; }
 .guide-release .guide-key { animation: guide-release-key 1.2s ease-out infinite; }
 .guide-release .guide-arrow-up { animation: guide-release-arrow 1.2s ease-out infinite; }
-@keyframes guide-press-key { 0%, 15% { transform: translateY(0); } 60%, 100% { transform: translateY(10px); } }
+@keyframes guide-press-key { 0%, 15% { transform: translateY(0); } 60%, 100% { transform: translateY(12px); } }
 @keyframes guide-press-arrow { 0% { opacity: 0; transform: translateY(-6px); } 25%, 60% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(6px); } }
-@keyframes guide-release-key { 0%, 20% { transform: translateY(10px); } 60%, 100% { transform: translateY(0); } }
+@keyframes guide-release-key { 0%, 20% { transform: translateY(12px); } 60%, 100% { transform: translateY(0); } }
 @keyframes guide-release-arrow { 0% { opacity: 0; transform: translateY(6px); } 25%, 60% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-6px); } }
 @media (prefers-reduced-motion: reduce) {
   .guide-press .guide-key, .guide-press .guide-arrow-down, .guide-release .guide-key, .guide-release .guide-arrow-up { animation: none; }
-  .guide-press .guide-key { transform: translateY(10px); }
+  .guide-press .guide-key { transform: translateY(12px); }
 }.selection-toolbar { display: flex; align-items: center; justify-content: space-between; margin: -18px auto 10px; max-width: 565px; color: var(--muted); font: 10px 'DM Mono', monospace; }.selection-toolbar .text-button { margin: 0; padding: 4px 0; color: var(--green); font: inherit; }
 
 
