@@ -2,7 +2,7 @@
 
 英語版: [USER_GUIDE.en.md](USER_GUIDE.en.md)
 
-対象バージョン: 0.7.0（Windows x64 デスクトップ版）
+対象バージョン: 0.7.1（Windows x64 デスクトップ版）
 
 RapidJAM Configurator は、RapidJAM コントローラーのボタン割り当て、入力モード、磁気スイッチ（Hall センサー）の設定を、USB 接続した状態で確認・変更するためのアプリです。非公式のコミュニティ製ツールで、MIT ライセンスで提供されます（[LICENSE](../LICENSE)）。無保証です。設定を書き込む前に、内容をよく確認してください。
 
