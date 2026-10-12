@@ -43,6 +43,8 @@ npm run test:hardware-labels
 
 See [DISTRIBUTION.md](DISTRIBUTION.md) for building the release ZIP, how WebView2 is handled, and the development port settings.
 
+For tuning the controller button face (marks and function labels), see [docs/dev/button-face-tuning.md](docs/dev/button-face-tuning.md).
+
 ## License and disclaimer
 
 Released under the [MIT License](LICENSE), without warranty. Check your settings before writing them to the device.
