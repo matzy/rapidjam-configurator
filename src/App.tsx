@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { SelectModifiers } from './components/ControllerDisplay'
 import { AlertTriangle, Check, ChevronRight, CircleHelp, Link2, RotateCcw, Save, ShieldAlert, Usb, Zap } from 'lucide-react'
 import { Action, DeviceConfig, DeviceTransport, GpioAssignment, GpioPin, HallCalibrationPatch, HallChannel, HallSetting } from './device'
-import { rawToRatio, secondHighest, secondLowest } from './utils/calibrationMath'
+import { rawToRatio } from './utils/calibrationMath'
 import type { CalibrationResults } from './types/calibration'
 import { ControllerDisplay as Controller } from './components/ControllerDisplay'
 import { SettingNumber, SettingSlider } from './components/SettingControls'
@@ -86,10 +86,10 @@ export function App() {
     setSelectedHallButtons(hallChannels)
   }
 
-  async function startCalibration() {
+  async function startCalibration(targets?: HallChannel[]) {
     if (calibrationStartInFlight.current || hallLiveReads.requiresReconnect) return
     if (!transport.supportsLiveHallCalibration()) {
-      await calibration.startCalibration()
+      await calibration.startCalibration(targets)
       return
     }
     calibrationStartInFlight.current = true
@@ -102,7 +102,7 @@ export function App() {
         hallLiveReads.resumeAfterCalibration()
         return
       }
-      await calibration.startCalibration()
+      await calibration.startCalibration(targets)
     } catch (error) {
       if (error instanceof LiveHallReadTimeoutError) {
         setNotice('Calibration is blocked because a live request timed out. Reconnect the controller first.')
@@ -131,7 +131,7 @@ export function App() {
     const nextHall = { ...config.hall }
     const patches: Partial<Record<HallChannel, HallCalibrationPatch>> = {}
     Object.entries(calibrationResults).forEach(([key, result]) => {
-      if (result.status !== 'complete' || result.pressed === null || result.polarity === null) return
+      if ((result.status !== 'complete' && result.status !== 'unstable') || result.pressed === null || result.polarity === null) return
       const id = key as HallChannel
       const old = config.hall[id]
       const sign = result.polarity === 'N' ? 1 : -1
@@ -170,8 +170,9 @@ export function App() {
   function handleCalibrationCircle(channel: HallChannel) {
     if (!calibrationResults || (calibrationStage !== 'capture' && calibrationStage !== 'review')) return
     const status = calibrationResults[channel].status
+    if (status === 'excluded') return
     if (calibrationStage === 'review') {
-      if (status !== 'complete' && status !== 'error') return
+      if (status !== 'complete' && status !== 'unstable' && status !== 'error') return
       calibration.remeasureFromReview(channel)
       return
     }

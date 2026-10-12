@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { meterClientXToMillimeters, millimetersToRatio, ratioToMillimeters, ratioToRaw, rawToRatio, rawToTravelMillimeters } from '../src/utils/calibrationMath.ts'
+import { meterClientXToMillimeters, median, millimetersToRatio, ratioToMillimeters, ratioToRaw, rawToRatio, rawToTravelMillimeters, secondDeepest } from '../src/utils/calibrationMath.ts'
+
+test('median picks the middle value regardless of input order', () => {
+	assert.equal(median([5, 1, 3, 9, 4]), 4)
+	assert.equal(median([7]), 7)
+	assert.equal(median([10, 20, 30, 40]), 25)
+	assert.throws(() => median([]), /At least one value/)
+})
+
+test('secondDeepest picks the second value farthest from idle for both polarities', () => {
+	// N polarity: pressed voltage rises above idle
+	assert.equal(secondDeepest([1000, 2000, 3500, 3000, 2500], 1000), 3000)
+	// P polarity: pressed voltage falls below idle
+	assert.equal(secondDeepest([3000, 2000, -500, 1000, 1500], 3000), 1000)
+})
+
+test('secondDeepest ignores a single spike at the deepest end', () => {
+	assert.equal(secondDeepest([1000, 3900, 2900, 2800, 2950], 1000), 2950)
+	assert.throws(() => secondDeepest([1000], 1000), /At least two values/)
+})
 
 test('raw ADC calibration values convert to travel equally for normal and reversed polarity', () => {
 	assert.equal(rawToRatio(2000, 1000, 3000), 0.5)
