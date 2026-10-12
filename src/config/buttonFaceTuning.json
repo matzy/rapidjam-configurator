@@ -1,0 +1,16 @@
+{
+  "engraving": {
+    "offsetX": 0,
+    "offsetY": 0,
+    "scale": 1,
+    "opacity": 0.08,
+    "shadow": 1
+  },
+  "label": {
+    "offsetX": 0,
+    "offsetY": 0,
+    "fontSize": 10,
+    "opacity": 1
+  },
+  "perChannel": {}
+}
