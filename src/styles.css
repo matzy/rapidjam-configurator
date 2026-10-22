@@ -151,6 +151,33 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .meter-signal.error { color: #ef9b91; }
 .meter-signal.error span { background: #ef9b91; }
 @media (max-width: 1150px) { .meter-legend { grid-template-columns: 1fr; } }
+.restore-confirm-overlay { z-index: 110; }
+.restore-dialog-card { align-items: stretch; width: min(100%, 620px); max-height: 90vh; overflow-y: auto; text-align: left; }
+.restore-dialog-card > svg, .restore-dialog-card > h2 { align-self: center; text-align: center; }
+.restore-dialog-card > p { text-align: left; }
+.restore-acknowledgement { display: flex; align-items: start; gap: 10px; padding: 12px; color: #e6ece9; border: 1px solid var(--line); background: #202b2e; font-size: 11px; line-height: 1.5; }
+.restore-acknowledgement input { flex: 0 0 auto; margin-top: 2px; accent-color: #f17e70; }
+.restore-file-picker { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line); color: #e6ece9; font-size: 11px; }
+.restore-error, .restore-blocking { color: #f1c3bc; font-size: 11px; line-height: 1.5; }
+.restore-error { margin: 0; }
+.restore-blocking { padding: 10px 12px; border-left: 3px solid #f17e70; background: rgba(180,58,48,.12); }
+.restore-done { display: flex; align-items: center; gap: 8px; color: var(--green); font-size: 11px; }
+.restore-preview { display: grid; gap: 8px; color: #d4ddd8; font-size: 11px; line-height: 1.5; }
+.restore-preview h3 { margin: 6px 0 2px; color: var(--muted); font-size: 11px; }
+.restore-preview ul { margin: 0; padding-left: 18px; }
+.restore-preview details summary { cursor: pointer; }
+.restore-preview small, .restore-file-name { color: var(--muted); }
+.restore-warnings { color: #f5c58e; }
+.restore-steps { display: grid; gap: 8px; margin-top: 10px; }
+.restore-steps > .secondary-button { justify-self: start; }
+.backup-group { display: block; margin: 10px 0; border: 1px solid var(--line); background: rgba(26,35,38,.72); }
+.backup-group > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; color: #b8c4be; font: 11px 'DM Mono', monospace; letter-spacing: 0; cursor: pointer; list-style: none; }
+.backup-group > summary::-webkit-details-marker { display: none; }
+.backup-group > summary::after { content: '\25B8'; color: var(--green); transition: transform .15s; }
+.backup-group[open] > summary { border-bottom: 1px solid var(--line); }
+.backup-group[open] > summary::after { transform: rotate(90deg); }
+.backup-group > .text-button { display: block; width: 100%; padding: 10px 14px; text-align: left; }
+.backup-group > .backup-hint { display: block; padding: 0 14px 10px; color: var(--muted); font-size: 9px; line-height: 1.45; }
 
 /* Controller: one SVG holds the body, keys, and engravings. Labels are HTML overlays. Key colors come from per-state vars. */
 .controller { position: relative; width: min(100%, 565px); margin: 49px auto 30px; }

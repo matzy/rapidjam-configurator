@@ -19,6 +19,8 @@ import { useLocale } from './useLocale'
 import { useSettingMode } from './hooks/useSettingMode'
 import { actuationMaxFor } from './config/settingMode'
 import { ButtonLabelProvider } from './ButtonLabelProvider'
+import { SettingsRestoreDialog } from './components/SettingsRestoreDialog'
+import { buildGp2040Backup, downloadTextFile, gp2040FileName } from './utils/settingsBackupFile'
 
 const transport: DeviceTransport = createTransport()
 const hallChannels = Array.from({ length: 16 }, (_, index) => `ch${index}` as HallChannel)
@@ -27,8 +29,10 @@ export function App() {
   const { locale, setLocale, t } = useLocale()
   const { settingMode, setSettingMode } = useSettingMode()
   const [expertConfirmOpen, setExpertConfirmOpen] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false)
   const deviceConfig = useDeviceConfig(transport)
-  const { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateMapping, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration } = deviceConfig
+  const { device, config, savedConfig, dirty, busy, notice, diagnostic, connectionFailed, restartComplete, setNotice, connect, restartToGamepad, updateMapping, updateHallMany, updateGpio, updateInputMode, updateKeyboardMapping, save, discard, saveHallCalibration, readSettingsSnapshot, applySettingsRestore } = deviceConfig
   const strokeSetting = useStrokeSetting(device, settingMode)
   const [activeButton, setActiveButton] = useState<HallChannel>('ch14')
   const [selectedHallButtons, setSelectedHallButtons] = useState<HallChannel[]>(['ch14'])
@@ -52,6 +56,21 @@ export function App() {
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [expertConfirmOpen])
+
+  async function downloadCurrentSettingsBackup() {
+    if (backupBusy || busy || !device) return
+    setBackupBusy(true)
+    try {
+      const snapshot = await readSettingsSnapshot()
+      downloadTextFile(gp2040FileName(), buildGp2040Backup(snapshot, device), 'application/json')
+      setNotice('Settings backup downloaded')
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      setNotice(`Unable to download settings backup: ${detail}`)
+    } finally {
+      setBackupBusy(false)
+    }
+  }
 
   function requestSettingMode(mode: 'standard' | 'expert') {
     if (mode === settingMode) return
@@ -202,6 +221,7 @@ export function App() {
         </div>
       </div>
     </div>}
+    {restoreDialogOpen && device && <SettingsRestoreDialog device={device} busy={busy} onReadSnapshot={readSettingsSnapshot} onApply={applySettingsRestore} onClose={() => setRestoreDialogOpen(false)} />}
     <header className="topbar" inert={expertConfirmOpen || undefined}>
       <div className="brand"><div className="brand-mark">RJ</div><div><strong>RapidJAM</strong><span>{t('CONFIGURATOR')}</span></div></div>
       <div className="device-status"><span className={`status-dot ${device ? 'online' : ''}`} />{device ? device.product : t('No device connected')}<span className="firmware">{device?.firmware ?? t('Connect a controller to begin')}</span></div>
@@ -215,7 +235,7 @@ export function App() {
         <div className="sidebar-heading">{t('CONFIGURATION')}</div>
         <button className={`nav-item ${section === 'mapping' ? 'selected' : ''}`} onClick={() => { calibrationStartToken.current += 1; setSection('mapping') }}><Link2 size={17} /> {t('Button mapping')} <ChevronRight size={15} /></button>
         <button className={`nav-item ${section === 'hall' ? 'selected' : ''}`} onClick={() => setSection('hall')}><Zap size={17} /> {t('Magnetic switches')} <ChevronRight size={15} /></button>
-        <div className="sidebar-foot"><div className="connection-card"><Usb size={17} /><div><strong>{device ? t('RapidJAM connected') : t('Looking for device')}</strong><span>{device ? t(device.transport === 'tauri' ? 'WebConfig HTTP via desktop app' : device.transport === 'http' ? 'WebConfig HTTP via local proxy' : 'Mock transport') : t('Connect RapidJAM by USB')}</span></div></div><button className="text-button" onClick={() => void reconnectDevice()} disabled={busy || restartComplete || calibrationStage !== 'idle' || calibrationStarting}>{t(busy ? 'Connecting...' : 'Reconnect device')}</button><button className="text-button" onClick={() => void restartToGamepad()} disabled={busy || connectionFailed || restartComplete || calibrationStage !== 'idle' || calibrationStarting}>{t('Restart in gamepad mode')}</button>{diagnostic && <details className="diagnostic"><summary>{t('Connection diagnostic')}</summary><code>{diagnostic}</code></details>}</div>
+        <div className="sidebar-foot"><div className="connection-card"><Usb size={17} /><div><strong>{device ? t('RapidJAM connected') : t('Looking for device')}</strong><span>{device ? t(device.transport === 'tauri' ? 'WebConfig HTTP via desktop app' : device.transport === 'http' ? 'WebConfig HTTP via local proxy' : 'Mock transport') : t('Connect RapidJAM by USB')}</span></div></div><button className="text-button" onClick={() => void reconnectDevice()} disabled={busy || restartComplete || calibrationStage !== 'idle' || calibrationStarting}>{t(busy ? 'Connecting...' : 'Reconnect device')}</button><button className="text-button" onClick={() => void restartToGamepad()} disabled={busy || connectionFailed || restartComplete || calibrationStage !== 'idle' || calibrationStarting}>{t('Restart in gamepad mode')}</button><details className="backup-group"><summary>{t('Settings backup and restore')}</summary><button className="text-button" onClick={() => void downloadCurrentSettingsBackup()} disabled={busy || backupBusy || !device || calibrationStage !== 'idle' || calibrationStarting}>{t('Save settings backup')}</button><button className="text-button" onClick={() => setRestoreDialogOpen(true)} disabled={busy || backupBusy || !device || dirty || calibrationStage !== 'idle' || calibrationStarting}>{t('Restore settings from backup')}</button>{dirty && <small className="backup-hint">{t('Save or discard unsaved changes before restoring.')}</small>}</details>{diagnostic && <details className="diagnostic"><summary>{t('Connection diagnostic')}</summary><code>{diagnostic}</code></details>}</div>
       </aside>
 
       <section className="content">
