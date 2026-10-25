@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { rawToRatio, ratioToRaw } from './utils/calibrationMath'
-import { assertSnapshotEqual, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
+import { assertSnapshotEqual, commitConfigSnapshot, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
 import { commitRestorePlan, type RestorePlan } from './transport/settingsBackup.mjs'
+import { tolerateUnreadableWriteResponse } from './transport/deviceResponse'
 import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse } from './transport/deviceResponse'
 import { FW_WORKAROUNDS, ChannelSwitchTracker, RequestGate, readLiveWithRecovery } from './transport/fwWorkarounds'
 import { CALIBRATION_VOLTAGE_READ_ATTEMPTS, CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS } from './config/constants'
@@ -422,7 +423,7 @@ export class HttpTransport implements DeviceTransport {
     const { snapshot } = await commitRestorePlan({
       plan,
       baseline,
-      request: (path, options) => this.request(path, options),
+      request: tolerateUnreadableWriteResponse((path, options) => this.request(path, options)),
       readSnapshot: () => this.readRawSnapshot(),
     })
     return decodeSnapshotConfig(snapshot)
@@ -515,79 +516,49 @@ export class HttpTransport implements DeviceTransport {
   async previewConfig(): Promise<void> {}
 
   async commitConfig(config: DeviceConfig): Promise<void> {
-    const pinMappings = await this.request<Record<string, { action: number, customButtonMask: number, customDpadMask: number }>>('/api/getPinMappings')
-    for (let pin = 0; pin <= 5; pin++) {
-      const assignment = config.gpioMappings[`gp${pin}` as GpioPin]
-      const action = gpioActionValues[assignment]
-      if (action === undefined) throw new Error(`${assignment} is not supported by the GP2040 GPIO API`)
-      const key = `pin${String(pin).padStart(2, '0')}`
-      pinMappings[key] = { action, customButtonMask: pinMappings[key]?.customButtonMask ?? 0, customDpadMask: pinMappings[key]?.customDpadMask ?? 0 }
-    }
-    await this.request('/api/setPinMappings', { method: 'POST', body: JSON.stringify(pinMappings) })
-
-    const calibrationResponse = await this.request<{ triggers: Array<Record<string, number>> }>('/api/getHETriggerCalibrations')
-    const triggers = calibrationResponse.triggers
-    for (let channel = 0; channel < 16; channel++) {
-      const id = `ch${channel}` as HallChannel
-      const setting = config.hall[id]
-      const existing = triggers[channel] ?? {}
-      triggers[channel] = {
-        ...existing,
-        action: gpioActionValues[config.hallMappings[id]],
-        idle: setting.idle,
-        active: ratioToRaw(setting.pressRatio, setting.idle, setting.pressed),
-        pressed: setting.pressed,
-        is_polarized: setting.polarity === 'P' ? 1 : 0,
-        release: ratioToRaw(setting.releaseRatio, setting.idle, setting.pressed),
-        noise: setting.noise,
-        rapidTrigger: setting.rapidTrigger ? 1 : 0,
-      }
-    }
-    await this.request('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
-
-    await this.request('/api/setKeyMappings', {
-      method: 'POST',
-      body: JSON.stringify(config.keyboardMappings),
+    // Unlike a blind read-modify-write, this re-reads the device twice and requires both reads to agree
+    // (a body corrupted by the firmware cannot match twice), writes only what changed, and reads each
+    // group back before moving on.
+    const baseline = await this.readRawSnapshot()
+    await commitConfigSnapshot({
+      config,
+      baseline,
+      gpioActionValues,
+      request: tolerateUnreadableWriteResponse((path, options) => this.request(path, options)),
+      readSnapshot: () => this.readRawSnapshot(),
     })
-
-    const gamepadOptions = await this.request<Record<string, unknown>>('/api/getGamepadOptions')
-    const inputMode = config.inputMode
-    const gamepadPatch = {
-      ...gamepadOptions,
-      inputMode: inputMode.inputMode,
-      inputDeviceType: inputMode.inputDeviceType,
-      ps4AuthType: inputMode.ps4AuthType,
-      ps5AuthType: inputMode.ps5AuthType,
-      xinputAuthType: inputMode.xinputAuthType,
-      ps4ControllerIDMode: inputMode.ps4ControllerIDMode,
-      switchTpShareForDs4: inputMode.switchTpShareForDs4 ? 1 : 0,
-      usbDescOverride: inputMode.usbDescOverride ? 1 : 0,
-      usbDescProduct: inputMode.usbDescProduct,
-      usbDescManufacturer: inputMode.usbDescManufacturer,
-      usbDescVersion: inputMode.usbDescVersion,
-      usbOverrideID: inputMode.usbOverrideID ? 1 : 0,
-      usbVendorID: inputMode.usbVendorID,
-      usbProductID: inputMode.usbProductID,
-    }
-    await this.request('/api/setGamepadOptions', { method: 'POST', body: JSON.stringify(gamepadPatch) })
   }
   async saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void> {
-    const calibrationResponse = await this.request<{ triggers: Array<Record<string, number>> }>('/api/getHETriggerCalibrations')
-    const triggers = calibrationResponse.triggers
+    // The whole trigger table is written back, so a corrupted read would be persisted. Require two
+    // identical reads first, and confirm the patched channels by reading them back afterwards.
+    const readTriggers = async () => {
+      const response = await this.request<{ triggers?: Array<Record<string, number>> }>('/api/getHETriggerCalibrations')
+      if (!Array.isArray(response.triggers) || response.triggers.length < 16) throw new InvalidDeviceResponseError('Hall calibration response is incomplete')
+      return response.triggers as Array<Record<string, number | boolean>>
+    }
+    const triggers = await readTriggers()
+    assertSnapshotEqual(await readTriggers(), triggers, 'Hall calibration pre-write freshness')
+    const expected: Array<Record<string, number | boolean>> = structuredClone(triggers)
     Object.entries(patches).forEach(([id, patch]) => {
       if (!patch) return
       const channel = Number(id.slice(2))
       const existing = triggers[channel] ?? {}
-      triggers[channel] = {
+      const polarized = patch.polarity === 'P'
+      const updated = {
         ...existing,
         idle: patch.idle,
         active: patch.active,
         pressed: patch.pressed,
-        is_polarized: patch.polarity === 'P' ? 1 : 0,
+        // The firmware stores is_polarized as a bool and reads it back as true/false; keep its JSON type
+        // so the readback comparison below does not see 1 !== true.
+        is_polarized: typeof existing.is_polarized === 'boolean' ? polarized : polarized ? 1 : 0,
         release: patch.threshold,
       }
+      triggers[channel] = updated
+      expected[channel] = { ...updated }
     })
-    await this.request('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
+    await tolerateUnreadableWriteResponse((path, options) => this.request(path, options))('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
+    assertSnapshotEqual(await readTriggers(), expected, 'Hall calibration')
   }
   async discardPreview(): Promise<void> {}
   async disconnect(): Promise<void> {}

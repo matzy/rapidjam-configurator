@@ -8,6 +8,24 @@ export class InvalidDeviceResponseError extends Error {
 
 export const HALL_ADC_MAX = 4095
 
+type DeviceRequest = (path: string, options?: RequestInit) => Promise<unknown>
+
+/**
+ * For multi-step saves that read the result back and compare it: a POST whose response body is
+ * unreadable does not say whether the write was applied, so let the caller's readback decide
+ * instead of failing the save (and never replay the POST). GETs and other errors still throw.
+ */
+export function tolerateUnreadableWriteResponse(request: DeviceRequest): DeviceRequest {
+  return async (path, options) => {
+    try {
+      return await request(path, options)
+    } catch (error) {
+      if ((options?.method ?? 'GET').toUpperCase() === 'POST' && isInvalidDeviceResponse(error)) return {}
+      throw error
+    }
+  }
+}
+
 export function isInvalidDeviceResponse(error: unknown): boolean {
   return error instanceof Error && error.name === 'InvalidDeviceResponseError'
 }

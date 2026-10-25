@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse } from '../src/transport/deviceResponse.ts'
+import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse, tolerateUnreadableWriteResponse } from '../src/transport/deviceResponse.ts'
 
 test('accepts an in-range integer voltage, with or without a matching targetId echo', () => {
   assert.equal(parseHallVoltageResponse({ voltage: 2350 }, 3), 2350)
@@ -20,6 +20,20 @@ test('values that cannot come from a 12-bit ADC are flagged as invalid responses
   for (const body of [{}, { voltage: -1 }, { voltage: 4096 }, { voltage: 12.5 }, { voltage: '2000' }, { voltage: null }, null, 'x']) {
     assert.throws(() => parseHallVoltageResponse(body, 1), InvalidDeviceResponseError, JSON.stringify(body))
   }
+})
+
+test('an unreadable POST response is left to the readback check, but GETs and other errors still throw', async () => {
+  const calls: string[] = []
+  const request = tolerateUnreadableWriteResponse(async (path, options) => {
+    calls.push(`${options?.method ?? 'GET'} ${path}`)
+    if (path === '/api/boom') throw new Error('network down')
+    throw new InvalidDeviceResponseError('Invalid JSON')
+  })
+  assert.deepEqual(await request('/api/setKeyMappings', { method: 'post' }), {})
+  await assert.rejects(request('/api/getKeyMappings'), InvalidDeviceResponseError)
+  await assert.rejects(request('/api/boom', { method: 'POST' }), /network down/)
+  // Never replayed: one call per request.
+  assert.equal(calls.length, 3)
 })
 
 test('a targetId echo for another channel is flagged as an invalid response', () => {
