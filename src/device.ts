@@ -3,7 +3,7 @@ import { rawToRatio, ratioToRaw } from './utils/calibrationMath'
 import { assertSnapshotEqual, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
 import { commitRestorePlan, type RestorePlan } from './transport/settingsBackup.mjs'
 import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse } from './transport/deviceResponse'
-import { FW_WORKAROUNDS, RequestGate, readLiveWithRecovery } from './transport/fwWorkarounds'
+import { FW_WORKAROUNDS, ChannelSwitchTracker, RequestGate, readLiveWithRecovery } from './transport/fwWorkarounds'
 import { CALIBRATION_VOLTAGE_READ_ATTEMPTS, CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS } from './config/constants'
 import { strokeDeviceKey } from './config/strokeProfiles'
 
@@ -452,8 +452,22 @@ export class HttpTransport implements DeviceTransport {
     await calibrationWait(1500)
   }
 
+  // FW-WORKAROUND(WA-4): throwaway read after switching channels (firmware EMA state is shared by all channels)
+  // — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
+  private readonly channelSwitch = new ChannelSwitchTracker(FW_WORKAROUNDS.discardFirstReadOnChannelSwitch)
+
+  private async settleChannel(channel: number): Promise<void> {
+    if (!this.channelSwitch.needsSettleRead(channel)) return
+    try {
+      await this.request<unknown>('/api/getHETriggerVoltage', { method: 'POST', body: JSON.stringify({ targetId: channel }) }, 8000)
+    } catch {
+      // The value is discarded either way; the real read that follows reports any persistent failure.
+    }
+  }
+
   async readHallVoltage(channel: number, onAttempt?: (attempt: number) => void): Promise<number> {
     assertHallChannelIndex(channel)
+    await this.settleChannel(channel)
     let lastError: Error | null = null
     for (let attempt = 0; attempt < CALIBRATION_VOLTAGE_READ_ATTEMPTS; attempt++) {
       onAttempt?.(attempt + 1)
@@ -470,6 +484,7 @@ export class HttpTransport implements DeviceTransport {
 
   async readHallVoltageLive(channel: number): Promise<number> {
     assertHallChannelIndex(channel)
+    await this.settleChannel(channel)
     // FW-WORKAROUND(WA-2): retry when the response body is corrupted — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
     // FW-WORKAROUND(WA-3): configure the mux when the firmware says it is not set up after boot (RapidJAM wiring only)
     return readLiveWithRecovery({

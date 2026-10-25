@@ -94,6 +94,28 @@ export async function readLiveWithRecovery(ops: LiveReadOps, flags: FwWorkaround
   }
 }
 
+/**
+ * WA-4: the firmware keeps one smoothing (EMA) state for all channels and seeds it from whatever it
+ * read last, so the first reading after a channel switch still contains a few percent of the previous
+ * channel. Tracks the last channel read; `needsSettleRead` says when a throwaway read should come first.
+ */
+export class ChannelSwitchTracker {
+  private last: number | null = null
+  private readonly enabled: boolean
+
+  constructor(enabled: boolean) {
+    this.enabled = enabled
+  }
+
+  /** True when `channel` differs from the previous read (or nothing was read yet). Marks it as current. */
+  needsSettleRead(channel: number): boolean {
+    if (!this.enabled) return false
+    const switched = this.last !== channel
+    this.last = channel
+    return switched
+  }
+}
+
 export const FW_WORKAROUNDS: FwWorkaroundFlags = {
   serializeRequests: true,
   retryCorruptLiveReads: true,

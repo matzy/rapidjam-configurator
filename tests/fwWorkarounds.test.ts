@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { InvalidDeviceResponseError } from '../src/transport/deviceResponse.ts'
-import { FW_WORKAROUNDS, LIVE_READ_MAX_ATTEMPTS, RequestGate, readLiveWithRecovery } from '../src/transport/fwWorkarounds.ts'
+import { ChannelSwitchTracker, FW_WORKAROUNDS, LIVE_READ_MAX_ATTEMPTS, RequestGate, readLiveWithRecovery } from '../src/transport/fwWorkarounds.ts'
 
 const withFlags = (patch: Partial<typeof FW_WORKAROUNDS>) => ({ ...FW_WORKAROUNDS, ...patch })
 
@@ -112,6 +112,17 @@ test('WA-3: the mux setup does not use up the corruption retries', async () => {
   const ops = scriptedRead([new Error('mux channels incorrect'), new InvalidDeviceResponseError('a'), new InvalidDeviceResponseError('b'), 1800])
   assert.equal(await readLiveWithRecovery({ ...ops, reseedMux: async () => {} }), 1800)
   assert.equal(ops.calls, 4)
+})
+
+test('WA-4: a throwaway read is requested on the first read and on every channel change, not on repeats', () => {
+  const tracker = new ChannelSwitchTracker(true)
+  assert.deepEqual([3, 3, 3, 4, 4, 3, 15, 15].map((channel) => tracker.needsSettleRead(channel)),
+    [true, false, false, true, false, true, true, false])
+})
+
+test('WA-4: a disabled tracker never asks for a throwaway read', () => {
+  const tracker = new ChannelSwitchTracker(false)
+  assert.deepEqual([1, 2, 1].map((channel) => tracker.needsSettleRead(channel)), [false, false, false])
 })
 
 test('WA-3: nothing is sent for other firmware errors, unknown boards, or with the flag off', async () => {
