@@ -142,6 +142,8 @@ The shipped `v0.7.12-48-g<fw-commit>-dirty` firmware returns a failed/empty resp
 - `../GP2040-CE/src/webconfig.cpp`
 - `../GP2040-CE/src/addons/he_trigger.cpp`
 
+Separate firmware bugs that remain in the current build (corrupted `/api` responses, `mux channels incorrect` after boot, channel bleed in smoothed Hall reads) are worked around on the configurator side; see [`docs/fw-workarounds.md`](docs/fw-workarounds.md) for the list and the procedure for removing the workarounds once the firmware is fixed.
+
 ## Known Limitations
 
 - The browser UI defaults to MockTransport; use `?transport=http` with the legacy local server for real hardware. The Tauri app selects the native HTTP bridge automatically.
