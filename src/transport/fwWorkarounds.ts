@@ -56,21 +56,39 @@ export class RequestGate {
 /** WA-2: total attempts for a live read whose response body arrived corrupted. */
 export const LIVE_READ_MAX_ATTEMPTS = 3
 
+/** WA-3: what getHETriggerVoltage answers after boot until setHETriggerOptions has been POSTed. */
+export const MUX_UNINITIALIZED_ERROR = 'mux channels incorrect'
+
+export function isMuxUninitializedError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(MUX_UNINITIALIZED_ERROR)
+}
+
 export interface LiveReadOps {
   /** One getHETriggerVoltage round trip, already validated. */
   read: () => Promise<number>
+  /** POST setHETriggerOptions for this board; leave undefined when the board's mux wiring is not known. */
+  reseedMux?: () => Promise<void>
 }
 
 /**
  * WA-2: getHETriggerVoltage only reads the ADC, so re-sending it is safe (unlike other POSTs).
  * Retries only when the response itself was unusable; firmware-reported errors and timeouts propagate.
+ * WA-3: if the firmware says the mux is not configured yet, configure it once and read again.
+ * The reseed is lazy, so firmware that already seeds its mux from stored config never triggers it.
  */
 export async function readLiveWithRecovery(ops: LiveReadOps, flags: FwWorkaroundFlags = FW_WORKAROUNDS): Promise<number> {
   const maxAttempts = flags.retryCorruptLiveReads ? LIVE_READ_MAX_ATTEMPTS : 1
+  let muxReseeded = false
   for (let attempt = 1; ; attempt++) {
     try {
       return await ops.read()
     } catch (error) {
+      if (flags.reseedMuxOnError && !muxReseeded && ops.reseedMux && isMuxUninitializedError(error)) {
+        muxReseeded = true
+        await ops.reseedMux()
+        attempt-- // configuring the mux is not a corruption retry
+        continue
+      }
       if (attempt >= maxAttempts || !isInvalidDeviceResponse(error)) throw error
     }
   }

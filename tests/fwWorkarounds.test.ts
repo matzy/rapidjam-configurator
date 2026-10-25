@@ -91,3 +91,41 @@ test('WA-2: with the flag off a corrupted response fails on the first attempt', 
   await assert.rejects(readLiveWithRecovery(ops, withFlags({ retryCorruptLiveReads: false })), InvalidDeviceResponseError)
   assert.equal(ops.calls, 1)
 })
+
+test('WA-3: "mux channels incorrect" triggers one mux setup and a re-read', async () => {
+  const ops = scriptedRead([new Error('mux channels incorrect'), 1900])
+  let reseeds = 0
+  assert.equal(await readLiveWithRecovery({ ...ops, reseedMux: async () => { reseeds++ } }), 1900)
+  assert.equal(reseeds, 1)
+  assert.equal(ops.calls, 2)
+})
+
+test('WA-3: the mux is set up only once even if the error persists', async () => {
+  const ops = scriptedRead([new Error('mux channels incorrect')])
+  let reseeds = 0
+  await assert.rejects(readLiveWithRecovery({ ...ops, reseedMux: async () => { reseeds++ } }), /mux channels incorrect/)
+  assert.equal(reseeds, 1)
+  assert.equal(ops.calls, 2)
+})
+
+test('WA-3: the mux setup does not use up the corruption retries', async () => {
+  const ops = scriptedRead([new Error('mux channels incorrect'), new InvalidDeviceResponseError('a'), new InvalidDeviceResponseError('b'), 1800])
+  assert.equal(await readLiveWithRecovery({ ...ops, reseedMux: async () => {} }), 1800)
+  assert.equal(ops.calls, 4)
+})
+
+test('WA-3: nothing is sent for other firmware errors, unknown boards, or with the flag off', async () => {
+  let reseeds = 0
+  const reseedMux = async () => { reseeds++ }
+
+  const other = scriptedRead([new Error('adc pin out of range')])
+  await assert.rejects(readLiveWithRecovery({ ...other, reseedMux }), /adc pin out of range/)
+
+  const unknownBoard = scriptedRead([new Error('mux channels incorrect')])
+  await assert.rejects(readLiveWithRecovery({ read: unknownBoard.read }), /mux channels incorrect/)
+
+  const flagOff = scriptedRead([new Error('mux channels incorrect')])
+  await assert.rejects(readLiveWithRecovery({ ...flagOff, reseedMux }, withFlags({ reseedMuxOnError: false })), /mux channels incorrect/)
+
+  assert.equal(reseeds, 0)
+})

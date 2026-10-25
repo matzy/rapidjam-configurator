@@ -5,6 +5,7 @@ import { commitRestorePlan, type RestorePlan } from './transport/settingsBackup.
 import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse } from './transport/deviceResponse'
 import { FW_WORKAROUNDS, RequestGate, readLiveWithRecovery } from './transport/fwWorkarounds'
 import { CALIBRATION_VOLTAGE_READ_ATTEMPTS, CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS } from './config/constants'
+import { strokeDeviceKey } from './config/strokeProfiles'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
@@ -326,6 +327,7 @@ export class HttpTransport implements DeviceTransport {
   // FW-WORKAROUND(WA-1): serialize /api requests with a short gap (firmware frees response strings
   // while RNDIS may still be sending them) — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
   private readonly gate = new RequestGate(FW_WORKAROUNDS.serializeRequests)
+  private isRapidJam = false
 
   /** `timeoutMs` (browser only) starts counting when the request leaves the queue, not when it is enqueued. */
   private request<T>(path: string, options?: RequestInit, timeoutMs?: number): Promise<T> {
@@ -385,13 +387,15 @@ export class HttpTransport implements DeviceTransport {
 
   async connect(): Promise<DeviceInfo> {
     const version = await this.request<{ version?: string, boardConfig?: string, boardConfigLabel?: string }>('/api/getFirmwareVersion')
-    return {
+    const info: DeviceInfo = {
       product: version.boardConfigLabel ?? version.boardConfig ?? 'Unknown device',
       firmware: version.version ?? 'GP2040-CE',
       transport: this.useTauri ? 'tauri' : 'http',
       boardConfig: version.boardConfig,
       boardConfigLabel: version.boardConfigLabel,
     }
+    this.isRapidJam = strokeDeviceKey(info) === 'rapidjam'
+    return info
   }
 
   async restartToGamepad(): Promise<void> {
@@ -424,7 +428,7 @@ export class HttpTransport implements DeviceTransport {
     return decodeSnapshotConfig(snapshot)
   }
 
-  async prepareHallCalibration(): Promise<void> {
+  private async sendMuxOptions(): Promise<void> {
     await this.request('/api/setHETriggerOptions', {
       method: 'POST',
       body: JSON.stringify({
@@ -441,6 +445,10 @@ export class HttpTransport implements DeviceTransport {
         heTriggerSmoothingFactor: 5,
       }),
     })
+  }
+
+  async prepareHallCalibration(): Promise<void> {
+    await this.sendMuxOptions()
     await calibrationWait(1500)
   }
 
@@ -463,7 +471,11 @@ export class HttpTransport implements DeviceTransport {
   async readHallVoltageLive(channel: number): Promise<number> {
     assertHallChannelIndex(channel)
     // FW-WORKAROUND(WA-2): retry when the response body is corrupted — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
-    return readLiveWithRecovery({ read: () => this.readHallVoltageLiveOnce(channel) })
+    // FW-WORKAROUND(WA-3): configure the mux when the firmware says it is not set up after boot (RapidJAM wiring only)
+    return readLiveWithRecovery({
+      read: () => this.readHallVoltageLiveOnce(channel),
+      reseedMux: this.isRapidJam ? () => this.sendMuxOptions() : undefined,
+    })
   }
 
   private async readHallVoltageLiveOnce(channel: number): Promise<number> {
