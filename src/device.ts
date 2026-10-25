@@ -1,7 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
 import { rawToRatio, ratioToRaw } from './utils/calibrationMath'
-import { assertSnapshotEqual, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
+import { assertSnapshotEqual, commitConfigSnapshot, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
 import { commitRestorePlan, type RestorePlan } from './transport/settingsBackup.mjs'
+import { tolerateUnreadableWriteResponse } from './transport/deviceResponse'
+import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse } from './transport/deviceResponse'
+import { FW_WORKAROUNDS, ChannelSwitchTracker, RequestGate, readLiveWithRecovery } from './transport/fwWorkarounds'
+import { CALIBRATION_VOLTAGE_READ_ATTEMPTS, CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS } from './config/constants'
+import { strokeDeviceKey } from './config/strokeProfiles'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
@@ -128,6 +133,9 @@ const actionFromGpioValue = (value: number): GpioAssignment => {
 }
 
 const calibrationWait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
+const assertHallChannelIndex = (channel: number) => {
+  if (!Number.isInteger(channel) || channel < 0 || channel > 15) throw new Error(`Invalid Hall channel: ${String(channel)}`)
+}
 const jsonBoolean = (value: unknown): boolean => value === true || value === 1 || value === '1'
 
 interface TauriDeviceApiResponse {
@@ -317,19 +325,47 @@ export class MockTransport implements DeviceTransport {
 export class HttpTransport implements DeviceTransport {
   constructor(private readonly baseUrl: string, private readonly useTauri = false) {}
 
-  private async request<T>(path: string, options?: RequestInit): Promise<T> {
+  // FW-WORKAROUND(WA-1): serialize /api requests with a short gap (firmware frees response strings
+  // while RNDIS may still be sending them) — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
+  private readonly gate = new RequestGate(FW_WORKAROUNDS.serializeRequests)
+  private isRapidJam = false
+
+  /** `timeoutMs` (browser only) starts counting when the request leaves the queue, not when it is enqueued. */
+  private request<T>(path: string, options?: RequestInit, timeoutMs?: number): Promise<T> {
+    return this.gate.run(() => this.performRequest<T>(path, options, timeoutMs))
+  }
+
+  private async performRequest<T>(path: string, options?: RequestInit, timeoutMs?: number): Promise<T> {
     const url = `${this.baseUrl}${path}`
     const method = (options?.method ?? 'GET').toUpperCase()
     // Reads are safe to retry. Writes may already have reached the controller even when
     // the response is lost (for example, reboot drops RNDIS), so never replay a POST.
     const maxAttempts = method === 'GET' ? 3 : 1
+    const controller = timeoutMs !== undefined && !this.useTauri ? new AbortController() : undefined
+    let timedOut = false
+    const timer = controller ? setTimeout(() => { timedOut = true; controller.abort() }, timeoutMs) : undefined
+    try {
+      return await this.performAttempts<T>(path, url, method, options, maxAttempts, controller?.signal)
+    } catch (error) {
+      if (timedOut) {
+        const timeoutError = new Error('Live Hall voltage read timed out; reconnect before starting calibration')
+        timeoutError.name = 'LiveHallReadTimeoutError'
+        throw timeoutError
+      }
+      throw error
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }
+
+  private async performAttempts<T>(path: string, url: string, method: string, options: RequestInit | undefined, maxAttempts: number, signal?: AbortSignal): Promise<T> {
     let lastError: Error | null = null
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       console.info(`[RapidJAM HTTP] ${method} ${url} (attempt ${attempt}/${maxAttempts})`)
       try {
         const response = this.useTauri
           ? await requestDeviceApi(path, method, options?.body)
-          : await fetch(url, { ...options, method, headers: { 'Content-Type': 'application/json', ...options?.headers } })
+          : await fetch(url, { ...options, method, ...(signal ? { signal } : {}), headers: { 'Content-Type': 'application/json', ...options?.headers } })
         console.info(`[RapidJAM HTTP] ${response.status} ${method} ${url}`)
         if (!response.ok) throw new Error(`Device request failed (${response.status}) at ${url}`)
         const body = await response.text()
@@ -338,26 +374,29 @@ export class HttpTransport implements DeviceTransport {
         } catch (error) {
           const detail = error instanceof Error ? error.message : String(error)
           console.error(`[RapidJAM HTTP] invalid JSON from ${url}: length=${body.length}, tail=${body.slice(-120)}`, error)
-          throw new Error(`Invalid JSON from ${url}: ${detail}`)
+          throw new InvalidDeviceResponseError(`Invalid JSON from ${url}: ${detail}`)
         }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
         if (attempt < maxAttempts) await calibrationWait(150)
       }
     }
-    if (lastError?.message.includes('Cannot reach')) throw lastError
+    // Keep the error type: callers tell a corrupted response (InvalidDeviceResponseError) from other failures.
+    if (lastError && (isInvalidDeviceResponse(lastError) || lastError.message.includes('Cannot reach'))) throw lastError
     throw new Error(lastError?.message ?? `Request failed: ${method} ${url}`)
   }
 
   async connect(): Promise<DeviceInfo> {
     const version = await this.request<{ version?: string, boardConfig?: string, boardConfigLabel?: string }>('/api/getFirmwareVersion')
-    return {
+    const info: DeviceInfo = {
       product: version.boardConfigLabel ?? version.boardConfig ?? 'Unknown device',
       firmware: version.version ?? 'GP2040-CE',
       transport: this.useTauri ? 'tauri' : 'http',
       boardConfig: version.boardConfig,
       boardConfigLabel: version.boardConfigLabel,
     }
+    this.isRapidJam = strokeDeviceKey(info) === 'rapidjam'
+    return info
   }
 
   async restartToGamepad(): Promise<void> {
@@ -384,13 +423,13 @@ export class HttpTransport implements DeviceTransport {
     const { snapshot } = await commitRestorePlan({
       plan,
       baseline,
-      request: (path, options) => this.request(path, options),
+      request: tolerateUnreadableWriteResponse((path, options) => this.request(path, options)),
       readSnapshot: () => this.readRawSnapshot(),
     })
     return decodeSnapshotConfig(snapshot)
   }
 
-  async prepareHallCalibration(): Promise<void> {
+  private async sendMuxOptions(): Promise<void> {
     await this.request('/api/setHETriggerOptions', {
       method: 'POST',
       body: JSON.stringify({
@@ -407,128 +446,119 @@ export class HttpTransport implements DeviceTransport {
         heTriggerSmoothingFactor: 5,
       }),
     })
+  }
+
+  async prepareHallCalibration(): Promise<void> {
+    await this.sendMuxOptions()
     await calibrationWait(1500)
   }
 
+  // FW-WORKAROUND(WA-4): throwaway read after switching channels (firmware EMA state is shared by all channels)
+  // — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
+  private readonly channelSwitch = new ChannelSwitchTracker(FW_WORKAROUNDS.discardFirstReadOnChannelSwitch)
+
+  private async settleChannel(channel: number): Promise<void> {
+    if (!this.channelSwitch.needsSettleRead(channel)) return
+    try {
+      await this.request<unknown>('/api/getHETriggerVoltage', { method: 'POST', body: JSON.stringify({ targetId: channel }) }, 8000)
+    } catch {
+      // The value is discarded either way; the real read that follows reports any persistent failure.
+    }
+  }
+
   async readHallVoltage(channel: number, onAttempt?: (attempt: number) => void): Promise<number> {
+    assertHallChannelIndex(channel)
+    await this.settleChannel(channel)
     let lastError: Error | null = null
-    for (let attempt = 0; attempt < 30; attempt++) {
+    for (let attempt = 0; attempt < CALIBRATION_VOLTAGE_READ_ATTEMPTS; attempt++) {
       onAttempt?.(attempt + 1)
       try {
-        const result = await this.request<{ voltage?: number, error?: string }>('/api/getHETriggerVoltage', { method: 'POST', body: JSON.stringify({ targetId: channel }) })
-        if (typeof result.voltage !== 'number') throw new Error(result.error ?? `No voltage returned for CH${channel}`)
-        return result.voltage
+        const result = await this.request<unknown>('/api/getHETriggerVoltage', { method: 'POST', body: JSON.stringify({ targetId: channel }) })
+        return parseHallVoltageResponse(result, channel)
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
-        if (attempt < 29) await calibrationWait(50)
+        if (attempt < CALIBRATION_VOLTAGE_READ_ATTEMPTS - 1) await calibrationWait(CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS)
       }
     }
-    throw new Error(`CH${channel} voltage read failed after 30 attempts: ${lastError?.message ?? 'unknown error'}`)
+    throw new Error(`CH${channel} voltage read failed after ${CALIBRATION_VOLTAGE_READ_ATTEMPTS} attempts: ${lastError?.message ?? 'unknown error'}`)
   }
 
   async readHallVoltageLive(channel: number): Promise<number> {
-    const controller = this.useTauri ? undefined : new AbortController()
-    let timedOut = false
-    const timeout = controller ? setTimeout(() => { timedOut = true; controller.abort() }, 8000) : undefined
+    assertHallChannelIndex(channel)
+    await this.settleChannel(channel)
+    // FW-WORKAROUND(WA-2): retry when the response body is corrupted — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
+    // FW-WORKAROUND(WA-3): configure the mux when the firmware says it is not set up after boot (RapidJAM wiring only)
+    return readLiveWithRecovery({
+      read: () => this.readHallVoltageLiveOnce(channel),
+      reseedMux: this.isRapidJam ? () => this.sendMuxOptions() : undefined,
+    })
+  }
+
+  private async readHallVoltageLiveOnce(channel: number): Promise<number> {
     try {
-      const result = await this.request<{ voltage?: number, error?: string }>('/api/getHETriggerVoltage', {
+      const result = await this.request<unknown>('/api/getHETriggerVoltage', {
         method: 'POST',
         body: JSON.stringify({ targetId: channel }),
-        ...(controller ? { signal: controller.signal } : {}),
-      })
-      if (typeof result.voltage !== 'number' || !Number.isFinite(result.voltage)) {
-        throw new Error(result.error ?? `No voltage returned for CH${channel}`)
-      }
-      return result.voltage
+      }, 8000)
+      return parseHallVoltageResponse(result, channel)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      if (timedOut || /timed?\s*out|timeout/i.test(detail)) {
+      if (error instanceof Error && error.name === 'LiveHallReadTimeoutError') throw error
+      if (/timed?\s*out|timeout/i.test(detail)) {
         const timeoutError = new Error('Live Hall voltage read timed out; reconnect before starting calibration')
         timeoutError.name = 'LiveHallReadTimeoutError'
         throw timeoutError
       }
       throw error
-    } finally {
-      if (timeout !== undefined) clearTimeout(timeout)
     }
   }
 
   async previewConfig(): Promise<void> {}
 
   async commitConfig(config: DeviceConfig): Promise<void> {
-    const pinMappings = await this.request<Record<string, { action: number, customButtonMask: number, customDpadMask: number }>>('/api/getPinMappings')
-    for (let pin = 0; pin <= 5; pin++) {
-      const assignment = config.gpioMappings[`gp${pin}` as GpioPin]
-      const action = gpioActionValues[assignment]
-      if (action === undefined) throw new Error(`${assignment} is not supported by the GP2040 GPIO API`)
-      const key = `pin${String(pin).padStart(2, '0')}`
-      pinMappings[key] = { action, customButtonMask: pinMappings[key]?.customButtonMask ?? 0, customDpadMask: pinMappings[key]?.customDpadMask ?? 0 }
-    }
-    await this.request('/api/setPinMappings', { method: 'POST', body: JSON.stringify(pinMappings) })
-
-    const calibrationResponse = await this.request<{ triggers: Array<Record<string, number>> }>('/api/getHETriggerCalibrations')
-    const triggers = calibrationResponse.triggers
-    for (let channel = 0; channel < 16; channel++) {
-      const id = `ch${channel}` as HallChannel
-      const setting = config.hall[id]
-      const existing = triggers[channel] ?? {}
-      triggers[channel] = {
-        ...existing,
-        action: gpioActionValues[config.hallMappings[id]],
-        idle: setting.idle,
-        active: ratioToRaw(setting.pressRatio, setting.idle, setting.pressed),
-        pressed: setting.pressed,
-        is_polarized: setting.polarity === 'P' ? 1 : 0,
-        release: ratioToRaw(setting.releaseRatio, setting.idle, setting.pressed),
-        noise: setting.noise,
-        rapidTrigger: setting.rapidTrigger ? 1 : 0,
-      }
-    }
-    await this.request('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
-
-    await this.request('/api/setKeyMappings', {
-      method: 'POST',
-      body: JSON.stringify(config.keyboardMappings),
+    // Unlike a blind read-modify-write, this re-reads the device twice and requires both reads to agree
+    // (a body corrupted by the firmware cannot match twice), writes only what changed, and reads each
+    // group back before moving on.
+    const baseline = await this.readRawSnapshot()
+    await commitConfigSnapshot({
+      config,
+      baseline,
+      gpioActionValues,
+      request: tolerateUnreadableWriteResponse((path, options) => this.request(path, options)),
+      readSnapshot: () => this.readRawSnapshot(),
     })
-
-    const gamepadOptions = await this.request<Record<string, unknown>>('/api/getGamepadOptions')
-    const inputMode = config.inputMode
-    const gamepadPatch = {
-      ...gamepadOptions,
-      inputMode: inputMode.inputMode,
-      inputDeviceType: inputMode.inputDeviceType,
-      ps4AuthType: inputMode.ps4AuthType,
-      ps5AuthType: inputMode.ps5AuthType,
-      xinputAuthType: inputMode.xinputAuthType,
-      ps4ControllerIDMode: inputMode.ps4ControllerIDMode,
-      switchTpShareForDs4: inputMode.switchTpShareForDs4 ? 1 : 0,
-      usbDescOverride: inputMode.usbDescOverride ? 1 : 0,
-      usbDescProduct: inputMode.usbDescProduct,
-      usbDescManufacturer: inputMode.usbDescManufacturer,
-      usbDescVersion: inputMode.usbDescVersion,
-      usbOverrideID: inputMode.usbOverrideID ? 1 : 0,
-      usbVendorID: inputMode.usbVendorID,
-      usbProductID: inputMode.usbProductID,
-    }
-    await this.request('/api/setGamepadOptions', { method: 'POST', body: JSON.stringify(gamepadPatch) })
   }
   async saveHallCalibration(patches: Partial<Record<HallChannel, HallCalibrationPatch>>): Promise<void> {
-    const calibrationResponse = await this.request<{ triggers: Array<Record<string, number>> }>('/api/getHETriggerCalibrations')
-    const triggers = calibrationResponse.triggers
+    // The whole trigger table is written back, so a corrupted read would be persisted. Require two
+    // identical reads first, and confirm the patched channels by reading them back afterwards.
+    const readTriggers = async () => {
+      const response = await this.request<{ triggers?: Array<Record<string, number>> }>('/api/getHETriggerCalibrations')
+      if (!Array.isArray(response.triggers) || response.triggers.length < 16) throw new InvalidDeviceResponseError('Hall calibration response is incomplete')
+      return response.triggers as Array<Record<string, number | boolean>>
+    }
+    const triggers = await readTriggers()
+    assertSnapshotEqual(await readTriggers(), triggers, 'Hall calibration pre-write freshness')
+    const expected: Array<Record<string, number | boolean>> = structuredClone(triggers)
     Object.entries(patches).forEach(([id, patch]) => {
       if (!patch) return
       const channel = Number(id.slice(2))
       const existing = triggers[channel] ?? {}
-      triggers[channel] = {
+      const polarized = patch.polarity === 'P'
+      const updated = {
         ...existing,
         idle: patch.idle,
         active: patch.active,
         pressed: patch.pressed,
-        is_polarized: patch.polarity === 'P' ? 1 : 0,
+        // The firmware stores is_polarized as a bool and reads it back as true/false; keep its JSON type
+        // so the readback comparison below does not see 1 !== true.
+        is_polarized: typeof existing.is_polarized === 'boolean' ? polarized : polarized ? 1 : 0,
         release: patch.threshold,
       }
+      triggers[channel] = updated
+      expected[channel] = { ...updated }
     })
-    await this.request('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
+    await tolerateUnreadableWriteResponse((path, options) => this.request(path, options))('/api/setHETriggerCalibrations', { method: 'POST', body: JSON.stringify({ triggers }) })
+    assertSnapshotEqual(await readTriggers(), expected, 'Hall calibration')
   }
   async discardPreview(): Promise<void> {}
   async disconnect(): Promise<void> {}

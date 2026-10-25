@@ -168,10 +168,12 @@ export function useHallCalibration(transport: DeviceTransport, setNotice: (messa
       const samples: number[][] = Array.from({ length: 16 }, () => [])
       const baselineErrors: Array<string | undefined> = Array.from({ length: 16 })
       const targetChannels = targetsRef.current
-      for (let round = 0; round < CALIBRATION_BASELINE_ROUNDS && targetChannels.some((channel) => samples[channel].length < CALIBRATION_SAMPLE_TARGET); round++) {
-        for (const channel of targetChannels) {
+      // FW-WORKAROUND(WA-4): sample one channel at a time. The transport discards one reading whenever the
+      // channel changes (firmware shares its smoothing state), so round-robin sampling would double the reads.
+      // — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み (revert してよい。順序が変わるだけで結果は同じ)
+      for (const channel of targetChannels) {
+        for (let round = 0; round < CALIBRATION_BASELINE_ROUNDS && samples[channel].length < CALIBRATION_SAMPLE_TARGET; round++) {
           if (cancelled.current) return
-          if (samples[channel].length >= CALIBRATION_SAMPLE_TARGET) continue
           setProgress((current) => ({ ...current, phase: `Baseline sample ${round + 1} / ${CALIBRATION_BASELINE_ROUNDS}`, channel, attempt: 0, action: 'hands-off' }))
           try {
             const voltage = await transport.readHallVoltage(channel, (attempt) => { setProgress((current) => ({ ...current, channel, attempt })); updateResult(channel, { status: 'waiting', attempt, sampleCount: samples[channel].length }) })
