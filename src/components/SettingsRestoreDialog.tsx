@@ -46,7 +46,6 @@ export function SettingsRestoreDialog({ device, busy, onReadSnapshot, onApply, o
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [doneMessage, setDoneMessage] = useState<string | null>(null)
-  const [backupSaved, setBackupSaved] = useState(false)
   const [backupConfirmed, setBackupConfirmed] = useState(false)
   const [hallConfirmed, setHallConfirmed] = useState(false)
   const [originConfirmed, setOriginConfirmed] = useState(false)
@@ -55,14 +54,13 @@ export function SettingsRestoreDialog({ device, busy, onReadSnapshot, onApply, o
 
   const plan = preview?.plan ?? null
   const canRun = Boolean(
-    plan && plan.ok && plan.hasChanges && backupSaved && backupConfirmed && hallConfirmed
+    plan && plan.ok && plan.hasChanges && backupConfirmed && hallConfirmed
     && (!plan.origin.requiresAcknowledgement || originConfirmed)
     && !loading && !running && !busy,
   )
   const working = loading || running
 
   function resetSteps() {
-    setBackupSaved(false)
     setBackupConfirmed(false)
     setHallConfirmed(false)
     setOriginConfirmed(false)
@@ -113,7 +111,6 @@ export function SettingsRestoreDialog({ device, busy, onReadSnapshot, onApply, o
         return
       }
       downloadTextFile(gp2040FileName(), buildGp2040Backup(snapshot, device), 'application/json')
-      setBackupSaved(true)
     } catch (caught) {
       setError(errorText(caught))
     } finally {
@@ -204,7 +201,7 @@ export function SettingsRestoreDialog({ device, busy, onReadSnapshot, onApply, o
             {t(loading ? 'Saving backup...' : '1. Save current settings')}
           </button>
           <label className="restore-acknowledgement">
-            <input type="checkbox" checked={backupConfirmed} disabled={!backupSaved} onChange={(event) => setBackupConfirmed(event.target.checked)} />
+            <input type="checkbox" checked={backupConfirmed} onChange={(event) => setBackupConfirmed(event.target.checked)} />
             <span>{t('I saved the current settings file. Use it to return to the current state if needed.')}</span>
           </label>
           <label className="restore-acknowledgement">

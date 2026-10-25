@@ -172,7 +172,7 @@ Open "Settings backup and restore" in the left sidebar to show "Save settings ba
 To restore, use "Restore settings from backup".
 
 1. Choose the `.gp2040` file to restore. The preview lists the items that will be restored, the values that will change, ignored items, and warnings.
-2. Under "1. Save current settings", back up the current settings first. This file lets you undo the restore if something goes wrong.
+2. If you have not backed up the current settings yet, use "1. Save current settings" (or "Save settings backup" in the sidebar). This file lets you undo the restore if something goes wrong. Saving it here is optional; the confirmation box can be checked without it.
 3. Check every confirmation box, then press "2. Restore settings".
 
 Notes:
