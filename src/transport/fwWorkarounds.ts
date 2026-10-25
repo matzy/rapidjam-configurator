@@ -8,6 +8,8 @@
  * removal procedure.
  */
 
+import { isInvalidDeviceResponse } from './deviceResponse.ts'
+
 export interface FwWorkaroundFlags {
   /** WA-1: one /api request at a time, with a short gap (firmware use-after-free on response strings). */
   serializeRequests: boolean
@@ -48,6 +50,29 @@ export class RequestGate {
     const result = this.tail.then(task)
     this.tail = result.catch(() => undefined).then(() => this.sleep(this.gapMs))
     return result
+  }
+}
+
+/** WA-2: total attempts for a live read whose response body arrived corrupted. */
+export const LIVE_READ_MAX_ATTEMPTS = 3
+
+export interface LiveReadOps {
+  /** One getHETriggerVoltage round trip, already validated. */
+  read: () => Promise<number>
+}
+
+/**
+ * WA-2: getHETriggerVoltage only reads the ADC, so re-sending it is safe (unlike other POSTs).
+ * Retries only when the response itself was unusable; firmware-reported errors and timeouts propagate.
+ */
+export async function readLiveWithRecovery(ops: LiveReadOps, flags: FwWorkaroundFlags = FW_WORKAROUNDS): Promise<number> {
+  const maxAttempts = flags.retryCorruptLiveReads ? LIVE_READ_MAX_ATTEMPTS : 1
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await ops.read()
+    } catch (error) {
+      if (attempt >= maxAttempts || !isInvalidDeviceResponse(error)) throw error
+    }
   }
 }
 

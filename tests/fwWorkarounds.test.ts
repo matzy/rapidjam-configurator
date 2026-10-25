@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { RequestGate } from '../src/transport/fwWorkarounds.ts'
+import { InvalidDeviceResponseError } from '../src/transport/deviceResponse.ts'
+import { FW_WORKAROUNDS, LIVE_READ_MAX_ATTEMPTS, RequestGate, readLiveWithRecovery } from '../src/transport/fwWorkarounds.ts'
+
+const withFlags = (patch: Partial<typeof FW_WORKAROUNDS>) => ({ ...FW_WORKAROUNDS, ...patch })
 
 // FW-WORKAROUND(WA-1) tests. Delete the matching blocks when the workaround is removed.
 
@@ -46,4 +49,45 @@ test('WA-1: a disabled gate keeps the original concurrent behaviour', async () =
   const gate = new RequestGate(false, 50)
   await Promise.all([1, 2, 3].map((id) => gate.run(trackedTask(state, id))))
   assert.equal(state.maxActive, 3)
+})
+
+function scriptedRead(outcomes: Array<number | Error>) {
+  let calls = 0
+  return {
+    read: async () => {
+      const outcome = outcomes[Math.min(calls++, outcomes.length - 1)]
+      if (outcome instanceof Error) throw outcome
+      return outcome
+    },
+    get calls() { return calls },
+  }
+}
+
+test('WA-2: a corrupted live response is retried and the next good read is returned', async () => {
+  const ops = scriptedRead([new InvalidDeviceResponseError('Invalid JSON'), new InvalidDeviceResponseError('bad voltage'), 2100])
+  assert.equal(await readLiveWithRecovery(ops), 2100)
+  assert.equal(ops.calls, 3)
+})
+
+test('WA-2: gives up after the attempt limit and surfaces the corruption error', async () => {
+  const ops = scriptedRead([new InvalidDeviceResponseError('Invalid JSON')])
+  await assert.rejects(readLiveWithRecovery(ops), InvalidDeviceResponseError)
+  assert.equal(ops.calls, LIVE_READ_MAX_ATTEMPTS)
+})
+
+test('WA-2: firmware errors and timeouts are not retried', async () => {
+  const firmware = scriptedRead([new Error('adc pin out of range')])
+  await assert.rejects(readLiveWithRecovery(firmware), /adc pin out of range/)
+  assert.equal(firmware.calls, 1)
+
+  const timeout = Object.assign(new Error('timed out'), { name: 'LiveHallReadTimeoutError' })
+  const timedOut = scriptedRead([timeout])
+  await assert.rejects(readLiveWithRecovery(timedOut), /timed out/)
+  assert.equal(timedOut.calls, 1)
+})
+
+test('WA-2: with the flag off a corrupted response fails on the first attempt', async () => {
+  const ops = scriptedRead([new InvalidDeviceResponseError('Invalid JSON'), 2100])
+  await assert.rejects(readLiveWithRecovery(ops, withFlags({ retryCorruptLiveReads: false })), InvalidDeviceResponseError)
+  assert.equal(ops.calls, 1)
 })

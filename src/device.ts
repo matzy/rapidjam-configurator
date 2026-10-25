@@ -3,7 +3,7 @@ import { rawToRatio, ratioToRaw } from './utils/calibrationMath'
 import { assertSnapshotEqual, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
 import { commitRestorePlan, type RestorePlan } from './transport/settingsBackup.mjs'
 import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse } from './transport/deviceResponse'
-import { FW_WORKAROUNDS, RequestGate } from './transport/fwWorkarounds'
+import { FW_WORKAROUNDS, RequestGate, readLiveWithRecovery } from './transport/fwWorkarounds'
 import { CALIBRATION_VOLTAGE_READ_ATTEMPTS, CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS } from './config/constants'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
@@ -462,6 +462,11 @@ export class HttpTransport implements DeviceTransport {
 
   async readHallVoltageLive(channel: number): Promise<number> {
     assertHallChannelIndex(channel)
+    // FW-WORKAROUND(WA-2): retry when the response body is corrupted — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
+    return readLiveWithRecovery({ read: () => this.readHallVoltageLiveOnce(channel) })
+  }
+
+  private async readHallVoltageLiveOnce(channel: number): Promise<number> {
     try {
       const result = await this.request<unknown>('/api/getHETriggerVoltage', {
         method: 'POST',
