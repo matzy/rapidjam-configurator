@@ -3,6 +3,7 @@ import { rawToRatio, ratioToRaw } from './utils/calibrationMath'
 import { assertSnapshotEqual, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
 import { commitRestorePlan, type RestorePlan } from './transport/settingsBackup.mjs'
 import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse } from './transport/deviceResponse'
+import { FW_WORKAROUNDS, RequestGate } from './transport/fwWorkarounds'
 import { CALIBRATION_VOLTAGE_READ_ATTEMPTS, CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS } from './config/constants'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
@@ -322,19 +323,46 @@ export class MockTransport implements DeviceTransport {
 export class HttpTransport implements DeviceTransport {
   constructor(private readonly baseUrl: string, private readonly useTauri = false) {}
 
-  private async request<T>(path: string, options?: RequestInit): Promise<T> {
+  // FW-WORKAROUND(WA-1): serialize /api requests with a short gap (firmware frees response strings
+  // while RNDIS may still be sending them) — 撤去条件: FW 2c3244cc/f9bba46a 相当の取り込み
+  private readonly gate = new RequestGate(FW_WORKAROUNDS.serializeRequests)
+
+  /** `timeoutMs` (browser only) starts counting when the request leaves the queue, not when it is enqueued. */
+  private request<T>(path: string, options?: RequestInit, timeoutMs?: number): Promise<T> {
+    return this.gate.run(() => this.performRequest<T>(path, options, timeoutMs))
+  }
+
+  private async performRequest<T>(path: string, options?: RequestInit, timeoutMs?: number): Promise<T> {
     const url = `${this.baseUrl}${path}`
     const method = (options?.method ?? 'GET').toUpperCase()
     // Reads are safe to retry. Writes may already have reached the controller even when
     // the response is lost (for example, reboot drops RNDIS), so never replay a POST.
     const maxAttempts = method === 'GET' ? 3 : 1
+    const controller = timeoutMs !== undefined && !this.useTauri ? new AbortController() : undefined
+    let timedOut = false
+    const timer = controller ? setTimeout(() => { timedOut = true; controller.abort() }, timeoutMs) : undefined
+    try {
+      return await this.performAttempts<T>(path, url, method, options, maxAttempts, controller?.signal)
+    } catch (error) {
+      if (timedOut) {
+        const timeoutError = new Error('Live Hall voltage read timed out; reconnect before starting calibration')
+        timeoutError.name = 'LiveHallReadTimeoutError'
+        throw timeoutError
+      }
+      throw error
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }
+
+  private async performAttempts<T>(path: string, url: string, method: string, options: RequestInit | undefined, maxAttempts: number, signal?: AbortSignal): Promise<T> {
     let lastError: Error | null = null
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       console.info(`[RapidJAM HTTP] ${method} ${url} (attempt ${attempt}/${maxAttempts})`)
       try {
         const response = this.useTauri
           ? await requestDeviceApi(path, method, options?.body)
-          : await fetch(url, { ...options, method, headers: { 'Content-Type': 'application/json', ...options?.headers } })
+          : await fetch(url, { ...options, method, ...(signal ? { signal } : {}), headers: { 'Content-Type': 'application/json', ...options?.headers } })
         console.info(`[RapidJAM HTTP] ${response.status} ${method} ${url}`)
         if (!response.ok) throw new Error(`Device request failed (${response.status}) at ${url}`)
         const body = await response.text()
@@ -434,26 +462,21 @@ export class HttpTransport implements DeviceTransport {
 
   async readHallVoltageLive(channel: number): Promise<number> {
     assertHallChannelIndex(channel)
-    const controller = this.useTauri ? undefined : new AbortController()
-    let timedOut = false
-    const timeout = controller ? setTimeout(() => { timedOut = true; controller.abort() }, 8000) : undefined
     try {
       const result = await this.request<unknown>('/api/getHETriggerVoltage', {
         method: 'POST',
         body: JSON.stringify({ targetId: channel }),
-        ...(controller ? { signal: controller.signal } : {}),
-      })
+      }, 8000)
       return parseHallVoltageResponse(result, channel)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      if (timedOut || /timed?\s*out|timeout/i.test(detail)) {
+      if (error instanceof Error && error.name === 'LiveHallReadTimeoutError') throw error
+      if (/timed?\s*out|timeout/i.test(detail)) {
         const timeoutError = new Error('Live Hall voltage read timed out; reconnect before starting calibration')
         timeoutError.name = 'LiveHallReadTimeoutError'
         throw timeoutError
       }
       throw error
-    } finally {
-      if (timeout !== undefined) clearTimeout(timeout)
     }
   }
 
