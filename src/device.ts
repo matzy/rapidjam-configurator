@@ -2,6 +2,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { rawToRatio, ratioToRaw } from './utils/calibrationMath'
 import { assertSnapshotEqual, deriveFnButtonPin, type RawDeviceSnapshot } from './transport/configPersistence.mjs'
 import { commitRestorePlan, type RestorePlan } from './transport/settingsBackup.mjs'
+import { InvalidDeviceResponseError, isInvalidDeviceResponse, parseHallVoltageResponse } from './transport/deviceResponse'
+import { CALIBRATION_VOLTAGE_READ_ATTEMPTS, CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS } from './config/constants'
 
 export type Action = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'B1' | 'B2' | 'B3' | 'B4' | 'L1' | 'R1' | 'L2' | 'R2' | 'L3' | 'R3' | 'S1' | 'S2' | 'A1' | 'A2' | 'A3' | 'A4' | 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8' | 'E9' | 'E10' | 'E11' | 'E12' | 'NONE'
 
@@ -128,6 +130,9 @@ const actionFromGpioValue = (value: number): GpioAssignment => {
 }
 
 const calibrationWait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
+const assertHallChannelIndex = (channel: number) => {
+  if (!Number.isInteger(channel) || channel < 0 || channel > 15) throw new Error(`Invalid Hall channel: ${String(channel)}`)
+}
 const jsonBoolean = (value: unknown): boolean => value === true || value === 1 || value === '1'
 
 interface TauriDeviceApiResponse {
@@ -338,14 +343,15 @@ export class HttpTransport implements DeviceTransport {
         } catch (error) {
           const detail = error instanceof Error ? error.message : String(error)
           console.error(`[RapidJAM HTTP] invalid JSON from ${url}: length=${body.length}, tail=${body.slice(-120)}`, error)
-          throw new Error(`Invalid JSON from ${url}: ${detail}`)
+          throw new InvalidDeviceResponseError(`Invalid JSON from ${url}: ${detail}`)
         }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
         if (attempt < maxAttempts) await calibrationWait(150)
       }
     }
-    if (lastError?.message.includes('Cannot reach')) throw lastError
+    // Keep the error type: callers tell a corrupted response (InvalidDeviceResponseError) from other failures.
+    if (lastError && (isInvalidDeviceResponse(lastError) || lastError.message.includes('Cannot reach'))) throw lastError
     throw new Error(lastError?.message ?? `Request failed: ${method} ${url}`)
   }
 
@@ -411,35 +417,33 @@ export class HttpTransport implements DeviceTransport {
   }
 
   async readHallVoltage(channel: number, onAttempt?: (attempt: number) => void): Promise<number> {
+    assertHallChannelIndex(channel)
     let lastError: Error | null = null
-    for (let attempt = 0; attempt < 30; attempt++) {
+    for (let attempt = 0; attempt < CALIBRATION_VOLTAGE_READ_ATTEMPTS; attempt++) {
       onAttempt?.(attempt + 1)
       try {
-        const result = await this.request<{ voltage?: number, error?: string }>('/api/getHETriggerVoltage', { method: 'POST', body: JSON.stringify({ targetId: channel }) })
-        if (typeof result.voltage !== 'number') throw new Error(result.error ?? `No voltage returned for CH${channel}`)
-        return result.voltage
+        const result = await this.request<unknown>('/api/getHETriggerVoltage', { method: 'POST', body: JSON.stringify({ targetId: channel }) })
+        return parseHallVoltageResponse(result, channel)
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
-        if (attempt < 29) await calibrationWait(50)
+        if (attempt < CALIBRATION_VOLTAGE_READ_ATTEMPTS - 1) await calibrationWait(CALIBRATION_VOLTAGE_RETRY_INTERVAL_MS)
       }
     }
-    throw new Error(`CH${channel} voltage read failed after 30 attempts: ${lastError?.message ?? 'unknown error'}`)
+    throw new Error(`CH${channel} voltage read failed after ${CALIBRATION_VOLTAGE_READ_ATTEMPTS} attempts: ${lastError?.message ?? 'unknown error'}`)
   }
 
   async readHallVoltageLive(channel: number): Promise<number> {
+    assertHallChannelIndex(channel)
     const controller = this.useTauri ? undefined : new AbortController()
     let timedOut = false
     const timeout = controller ? setTimeout(() => { timedOut = true; controller.abort() }, 8000) : undefined
     try {
-      const result = await this.request<{ voltage?: number, error?: string }>('/api/getHETriggerVoltage', {
+      const result = await this.request<unknown>('/api/getHETriggerVoltage', {
         method: 'POST',
         body: JSON.stringify({ targetId: channel }),
         ...(controller ? { signal: controller.signal } : {}),
       })
-      if (typeof result.voltage !== 'number' || !Number.isFinite(result.voltage)) {
-        throw new Error(result.error ?? `No voltage returned for CH${channel}`)
-      }
-      return result.voltage
+      return parseHallVoltageResponse(result, channel)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       if (timedOut || /timed?\s*out|timeout/i.test(detail)) {
